@@ -178,6 +178,12 @@ You can make a quick spoken test file with
 - **Hotkey does nothing:** Accessibility isn't granted, or the grant belongs to an older signature.
   Remove Bardic from the Accessibility list and add it again. To reset it from the terminal, run
   `tccutil reset Accessibility com.jesseboyes.bardic`.
+- **The pill says "Can't hear you" or "Didn't catch that":** the mic level is very low. Raise it under
+  System Settings › Sound › Input. Video-call sites and apps sometimes turn it down. The log line for
+  each dictation shows its levels, for example `dictation: 5.8s, speech -44 dBFS, …`. Speech below about
+  -58 dBFS is treated as silence. To keep the last 20 recordings for inspection, run
+  `defaults write com.jesseboyes.bardic debugSaveAudio -bool YES`. They're saved in
+  `~/Library/Application Support/Bardic/DebugAudio`.
 - **The orange mic dot flashes when I use Option shortcuts:** this is expected. Pressing the trigger key
   starts the mic, and a quick tap cancels it.
 - **Changed models or turned AI cleanup on, but nothing happened:** press Settings › Models ›

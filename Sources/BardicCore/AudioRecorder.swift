@@ -12,7 +12,7 @@ public final class AudioRecorder {
     private let lock = NSLock()
     private var samples: [Float] = []
 
-    /// Called on the audio thread with a 0...1 level, for the HUD meter.
+    /// Called on the audio thread with the RMS of each captured chunk (roughly every 25 ms).
     public var onLevel: ((Float) -> Void)?
 
     public private(set) var isRecording = false
@@ -74,10 +74,7 @@ public final class AudioRecorder {
         lock.lock(); samples.append(contentsOf: chunk); lock.unlock()
 
         if let onLevel, !chunk.isEmpty {
-            let rms = AudioRecorder.rms(chunk)
-            // Map roughly -50 dB...0 dB to 0...1
-            let db = 20 * log10(max(rms, 1e-6))
-            onLevel(max(0, min(1, (db + 50) / 50)))
+            onLevel(AudioRecorder.rms(chunk))
         }
     }
 
@@ -86,6 +83,33 @@ public final class AudioRecorder {
         var sum: Float = 0
         for v in x { sum += v * v }
         return sqrt(sum / Float(x.count))
+    }
+
+    /// Loudness of the speech in a recording: the 90th-percentile RMS of 100 ms frames. Unlike
+    /// whole-clip RMS this ignores pauses, so a quiet speaker who pauses a lot isn't mistaken
+    /// for silence. Room noise on a MacBook mic sits around -73 dBFS; quiet speech around -45.
+    public static func speechLevel(_ x: [Float]) -> Float {
+        let frame = Int(sampleRate / 10)
+        guard x.count >= frame else { return rms(x) }
+        let levels = stride(from: 0, to: x.count - frame + 1, by: frame)
+            .map { rms(Array(x[$0..<$0 + frame])) }
+            .sorted()
+        return levels[Int(Double(levels.count - 1) * 0.9)]
+    }
+
+    /// Below this speech level a recording is treated as silence (about -58 dBFS: well above
+    /// room noise, well below even quiet speech).
+    public static let silenceLevel: Float = 0.00125
+
+    /// A single ~25 ms chunk louder than this (-55 dBFS) counts as hearing a voice, for the live
+    /// "can't hear you" warning.
+    public static let voiceLevel: Float = 0.0018
+
+    /// Maps a chunk RMS to 0...1 for a level meter. The range (-65...-25 dBFS) is where real
+    /// speech on a laptop mic lands, so even quiet speakers see the bars move.
+    public static func meterLevel(_ rms: Float) -> Float {
+        let db = 20 * log10(max(rms, 1e-7))
+        return max(0, min(1, (db + 65) / 40))
     }
 
     public static func peak(_ x: [Float]) -> Float {

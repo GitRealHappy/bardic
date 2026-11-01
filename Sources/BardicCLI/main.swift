@@ -68,22 +68,26 @@ let model = CleanupModel(rawValue: ProcessInfo.processInfo.environment["BARDIC_L
 do {
     switch command {
     case "transcribe":
-        guard let path = args.dropFirst().first else { log("usage: bardic-cli transcribe <file>"); exit(2) }
+        let paths = args.dropFirst()
+        guard !paths.isEmpty else { log("usage: bardic-cli transcribe <file>…"); exit(2) }
         let transcriber = Transcriber()
         var t0 = Date()
         try await transcriber.load(.largeV3Turbo) { log($0) }
         try await cleaner.load(model) { log($0) }
         log("models loaded in \(String(format: "%.1f", Date().timeIntervalSince(t0)))s")
-        let audio = try loadAudio16k(path)
-        t0 = Date()
-        let raw = try await transcriber.transcribe(audio)
-        let tASR = Date().timeIntervalSince(t0)
-        t0 = Date()
-        let cleaned = try await cleaner.clean(raw, style: .standard, vocabulary: [])
-        let tLLM = Date().timeIntervalSince(t0)
-        print("RAW:     \(raw)")
-        print("CLEANED: \(cleaned.text)")
-        log(String(format: "audio %.1fs | whisper %.2fs | llm %.2fs", Double(audio.count) / 16_000, tASR, tLLM))
+        for path in paths {
+            let audio = try loadAudio16k(path)
+            print("== \((path as NSString).lastPathComponent) (speech \(AudioRecorder.dB(AudioRecorder.speechLevel(audio))) dBFS)")
+            t0 = Date()
+            let raw = try await transcriber.transcribe(audio)
+            let tASR = Date().timeIntervalSince(t0)
+            t0 = Date()
+            let cleaned = try await cleaner.clean(raw, style: .standard, vocabulary: [])
+            let tLLM = Date().timeIntervalSince(t0)
+            print("RAW:     \(raw)")
+            print("CLEANED: \(cleaned.text)")
+            log(String(format: "audio %.1fs | whisper %.2fs | llm %.2fs", Double(audio.count) / 16_000, tASR, tLLM))
+        }
 
     case "clean":
         guard let raw = args.dropFirst().first else { log("usage: bardic-cli clean \"text\" [style]"); exit(2) }

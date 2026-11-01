@@ -8,7 +8,8 @@ final class HUDController {
     private var hideTask: Task<Void, Never>?
 
     init(state: AppState) {
-        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 220, height: 44),
+        // Wider than the pill itself, which sizes to its content; the rest is transparent.
+        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 380, height: 44),
                         styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered, defer: true)
         panel.isFloatingPanel = true
@@ -52,9 +53,7 @@ struct HUDView: View {
         HStack(spacing: 10) {
             switch state.phase {
             case .recording(let handsFree):
-                Circle().fill(.red).frame(width: 8, height: 8)
-                LevelBars(level: state.level)
-                if handsFree { Text("tap to finish").font(.caption).foregroundStyle(.secondary) }
+                RecordingStatus(handsFree: handsFree)
             case .processing:
                 ProgressView().controlSize(.small)
                 Text("Thinking…").font(.callout)
@@ -72,9 +71,42 @@ struct HUDView: View {
             }
         }
         .padding(.horizontal, 16)
-        .frame(width: 220, height: 44)
+        .frame(minWidth: 180, maxWidth: 360, minHeight: 44, maxHeight: 44)
+        .fixedSize()
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(.white.opacity(0.15)))
+        .frame(width: 380, height: 44)
+    }
+}
+
+/// Live feedback while recording, so a long dictation never turns out to be lost: a running
+/// timer, bars that follow the voice, and a warning if the mic has picked up nothing for a while.
+private struct RecordingStatus: View {
+    @EnvironmentObject var state: AppState
+    let handsFree: Bool
+
+    /// How long without voice before warning; long enough to cover a pause to think.
+    private let quietWarning: TimeInterval = 2.5
+
+    var body: some View {
+        TimelineView(.periodic(from: state.recordStart, by: 0.25)) { context in
+            let elapsed = context.date.timeIntervalSince(state.recordStart)
+            let quiet = context.date.timeIntervalSince(state.lastVoiceAt) > quietWarning
+            HStack(spacing: 10) {
+                Circle().fill(.red).frame(width: 8, height: 8)
+                    .opacity(quiet ? 0.5 : 1)
+                LevelBars(level: state.level)
+                    .foregroundStyle(quiet ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                Text(Duration.seconds(elapsed).formatted(.time(pattern: .minuteSecond)))
+                    .font(.callout.monospacedDigit())
+                if quiet {
+                    Label("Can't hear you", systemImage: "mic.slash")
+                        .font(.caption).foregroundStyle(.orange)
+                } else if handsFree {
+                    Text("tap to finish").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 }
 
@@ -86,7 +118,7 @@ struct LevelBars: View {
         HStack(spacing: 3) {
             ForEach(weights.indices, id: \.self) { i in
                 Capsule()
-                    .fill(.primary)
+                    .fill(.foreground)
                     .frame(width: 3, height: CGFloat(4 + 18 * level * weights[i]))
             }
         }

@@ -57,7 +57,10 @@ final class AppState: ObservableObject {
     lazy var onboarding = OnboardingController(state: self)
 
     private var targetApp: NSRunningApplication?
-    private var recordStart = Date()
+    private(set) var recordStart = Date()
+    /// Last time the mic picked up something louder than room noise. Not @Published: the HUD
+    /// polls it on a timer rather than redrawing for every audio chunk.
+    private(set) var lastVoiceAt = Date()
     private var permissionTimer: Timer?
 
     var vocabulary: [String] {
@@ -100,8 +103,12 @@ final class AppState: ObservableObject {
     func start() {
         chooseDefaultModelsForThisMac()
         loadHistory()
-        recorder.onLevel = { [weak self] lvl in
-            Task { @MainActor in self?.level = lvl }
+        recorder.onLevel = { [weak self] rms in
+            Task { @MainActor in
+                guard let self else { return }
+                self.level = AudioRecorder.meterLevel(rms)
+                if rms > AudioRecorder.voiceLevel { self.lastVoiceAt = Date() }
+            }
         }
         hotkeys.onEvent = { [weak self] e in self?.handle(e) }
         hotkeys.start()
@@ -205,6 +212,7 @@ final class AppState: ObservableObject {
         do {
             try recorder.start()
             recordStart = Date()
+            lastVoiceAt = recordStart
             phase = .recording(handsFree: handsFree)
             hud.show()
         } catch {
@@ -226,8 +234,10 @@ final class AppState: ObservableObject {
         let samples = recorder.stop()
         let seconds = Double(samples.count) / AudioRecorder.sampleRate
         let rms = AudioRecorder.rms(samples)
-        let levels = String(format: "%.1fs, rms %d dBFS, peak %d dBFS", seconds,
-                            AudioRecorder.dB(rms), AudioRecorder.dB(AudioRecorder.peak(samples)))
+        let speech = AudioRecorder.speechLevel(samples)
+        let levels = String(format: "%.1fs, speech %d dBFS, rms %d dBFS, peak %d dBFS", seconds,
+                            AudioRecorder.dB(speech), AudioRecorder.dB(rms),
+                            AudioRecorder.dB(AudioRecorder.peak(samples)))
 
         // Ignore accidental taps and silence (Whisper hallucinates "Thank you." on silence).
         guard seconds > 0.4 else {
@@ -236,7 +246,7 @@ final class AppState: ObservableObject {
             hud.hide()
             return
         }
-        guard rms > 0.004 else {
+        guard speech > AudioRecorder.silenceLevel else {
             AppState.log.notice("dictation: \(levels, privacy: .public) → below silence threshold")
             saveDebugAudio(samples, outcome: "silent")
             phase = .idle
