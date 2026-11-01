@@ -21,8 +21,10 @@ INSTALLING
        - allow Accessibility (so the dictation key works in every app and
          Bardic can paste the text)
        - choose your dictation key
-       - wait for the models to download (about 2.5 GB, once). Later launches
-         work offline.
+       - wait for the models to download (about 2.5 GB, once). After the
+         download, Bardic spends up to 10 more minutes preparing the speech
+         model for your Mac. That only happens the first time. Later launches
+         take seconds and work offline.
 
 Bardic lives in the menu bar (the waveform icon at the top right), not the Dock.
 

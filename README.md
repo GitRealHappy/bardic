@@ -55,7 +55,9 @@ The script does the following:
    `VERSION` can be overridden the same way.
 5. Installs the app to `~/Applications`.
 6. With `--dmg`, packages the app as a drag-to-Applications disk image, together with
-   `scripts/dmg/Read Me First.txt`. With `--notarize`, it also submits
+   `scripts/dmg/Read Me First.txt`. The DMG itself is signed only with a Developer ID: macOS checks a
+   signed DMG when it's opened and blocks it unless it's notarized, while an unsigned one just mounts.
+   With `--notarize`, it also submits
    the DMG to Apple with `notarytool` and staples the ticket. Notarization needs a Developer ID
    certificate and a stored keychain profile; create the profile once with
    `xcrun notarytool store-credentials bardic-notary --apple-id <email> --team-id <team>`.
@@ -68,7 +70,7 @@ The script does the following:
 3. Run `scripts/release.sh <version>` to publish. It:
    - refuses to run on a dirty tree, outside `main`, or with only ad-hoc signing
    - runs the cleanup eval and stops on any failure (`--skip-eval` skips this)
-   - writes `VERSION` and builds and signs the DMG
+   - writes `VERSION` and builds the DMG, with the app signed inside it
    - commits, tags `v<version>`, pushes, and creates the GitHub release with the DMG and its SHA-256
 
 Every release must be signed with the same certificate, or users lose their Accessibility grant when
@@ -107,8 +109,8 @@ dropdown. If both permissions are already granted, for example after an upgrade,
      **Retry**. A partly downloaded or damaged Whisper model is detected and downloaded again.
    - If only the cleanup model fails, dictation still works and pastes the raw transcript. The menu
      says "AI cleanup unavailable".
-   - Core ML then compiles Whisper for the Neural Engine. This happens once and can take several
-     minutes.
+   - Core ML then compiles Whisper for the Neural Engine. This happens once and took about 9 minutes
+     on an M1 Pro.
    - Later launches load from disk in about 15 s and need no network.
 
 ## Using it
@@ -261,7 +263,7 @@ You can make a quick spoken test file with
 - **Changed models or turned AI cleanup on, but nothing happened:** press Settings › Models ›
   "Apply & reload models".
 - **The first launch seems stuck on "Loading speech model":** the one-time Neural Engine compile is
-  running. Give it a few minutes.
+  running. It can take up to 10 minutes.
 
 ## Upgrading from Whiskr Flow
 

@@ -132,10 +132,10 @@ if (( MAKE_DMG )); then
   cp "$ROOT/scripts/dmg/Read Me First.txt" "$STAGE/"
   hdiutil create -quiet -volname "$APP_NAME" -srcfolder "$STAGE" -fs HFS+ -format UDZO "$DMG"
   rm -rf "$STAGE"
-  if [[ "$IDENTITY" != "-" ]]; then
-    DMG_ARGS=(--force --sign "$IDENTITY")
-    [[ "$IDENTITY" == "Developer ID Application"* ]] && DMG_ARGS+=(--timestamp)
-    codesign "${DMG_ARGS[@]}" "$DMG"
+  # Sign the disk image only with Developer ID (for notarization). macOS checks a *signed* DMG when it's
+  # opened and blocks it unless it's notarized; an unsigned one mounts, and only the app inside is checked.
+  if [[ "$IDENTITY" == "Developer ID Application"* ]]; then
+    codesign --force --sign "$IDENTITY" --timestamp "$DMG"
   fi
 
   if (( NOTARIZE )); then

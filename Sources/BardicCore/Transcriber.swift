@@ -66,7 +66,7 @@ public actor Transcriber {
     }
 
     private static func loadFromDisk(_ folder: URL, progress: (@Sendable (String) -> Void)?) async throws -> WhisperKit {
-        progress?("Loading speech model (first launch compiles for the Neural Engine, can take a few minutes)…")
+        progress?("Loading speech model (the first time, preparing it for this Mac takes up to 10 minutes)…")
         let config = WhisperKitConfig(modelFolder: folder.path, tokenizerFolder: Paths.speechModels,
                                       verbose: false, logLevel: .error,
                                       prewarm: true, load: true, download: false)

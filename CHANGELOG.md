@@ -2,8 +2,12 @@
 
 ## 0.2.1
 
+- The disk image opens without a security warning. 0.2.0's disk image was signed, which makes macOS
+  check it and block it because it isn't notarized. Now only the app asks for "Open Anyway".
 - Pressing Retry while still offline no longer deletes a speech or cleanup model that had finished
   downloading.
+- The setup message now says the one-time preparation of the speech model can take up to 10 minutes.
+  It took about 9 on an M1 Pro.
 
 ## 0.2.0
 
