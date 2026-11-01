@@ -65,7 +65,10 @@ struct HUDView: View {
                 ProgressView().controlSize(.small)
                 Text(msg).font(.caption).lineLimit(1)
             case .idle:
-                EmptyView()
+                if let notice = state.notice {
+                    Image(systemName: "ear.trianglebadge.exclamationmark").foregroundStyle(.orange)
+                    Text(notice).font(.caption).lineLimit(2)
+                }
             }
         }
         .padding(.horizontal, 16)

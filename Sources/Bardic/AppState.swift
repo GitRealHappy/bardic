@@ -43,6 +43,8 @@ final class AppState: ObservableObject {
         didSet { if phase != oldValue { AppState.log.notice("phase: \(String(describing: self.phase), privacy: .public)") } }
     }
     @Published var level: Float = 0
+    /// Short message shown in the HUD while idle, e.g. when nothing was heard.
+    @Published var notice: String?
     @Published var history: [HistoryItem] = []
     @Published var micGranted = Permissions.microphoneGranted
     @Published var accessibilityGranted = Permissions.accessibilityGranted
@@ -199,6 +201,7 @@ final class AppState: ObservableObject {
             return
         }
         targetApp = NSWorkspace.shared.frontmostApplication
+        notice = nil
         do {
             try recorder.start()
             recordStart = Date()
@@ -222,11 +225,22 @@ final class AppState: ObservableObject {
         guard case .recording = phase else { return }
         let samples = recorder.stop()
         let seconds = Double(samples.count) / AudioRecorder.sampleRate
+        let rms = AudioRecorder.rms(samples)
+        let levels = String(format: "%.1fs, rms %d dBFS, peak %d dBFS", seconds,
+                            AudioRecorder.dB(rms), AudioRecorder.dB(AudioRecorder.peak(samples)))
 
         // Ignore accidental taps and silence (Whisper hallucinates "Thank you." on silence).
-        guard seconds > 0.4, AudioRecorder.rms(samples) > 0.004 else {
+        guard seconds > 0.4 else {
+            AppState.log.notice("dictation: \(levels, privacy: .public) → too short, ignored")
             phase = .idle
             hud.hide()
+            return
+        }
+        guard rms > 0.004 else {
+            AppState.log.notice("dictation: \(levels, privacy: .public) → below silence threshold")
+            saveDebugAudio(samples, outcome: "silent")
+            phase = .idle
+            flashNotice("Didn't catch that. Is the mic too quiet?")
             return
         }
 
@@ -239,7 +253,13 @@ final class AppState: ObservableObject {
             let raw = try await transcriber.transcribe(samples, language: language.isEmpty ? nil : language,
                                                        vocabulary: vocabulary)
             let tASR = Date().timeIntervalSince(t0)
-            guard !raw.isEmpty else { phase = .idle; hud.hide(); return }
+            guard !raw.isEmpty else {
+                AppState.log.notice("dictation: \(levels, privacy: .public) → no words recognized")
+                saveDebugAudio(samples, outcome: "empty")
+                phase = .idle
+                flashNotice("Didn't catch any words. Try again?")
+                return
+            }
 
             var text = raw
             var usedLLM = false
@@ -258,6 +278,8 @@ final class AppState: ObservableObject {
                 try? await Task.sleep(nanoseconds: 150_000_000)
             }
             await TextInserter.insert(text)
+            AppState.log.notice("dictation: \(levels, privacy: .public) → inserted \(text.count) chars into \(appName ?? "?", privacy: .public)")
+            saveDebugAudio(samples, outcome: "ok")
 
             let timing = String(format: "%.1fs audio · whisper %.2fs · llm %.2fs", seconds, tASR, tLLM)
             addHistory(HistoryItem(date: Date(), raw: raw, text: text.trimmingCharacters(in: .whitespaces),
@@ -267,6 +289,27 @@ final class AppState: ObservableObject {
         } catch {
             phase = .error(error.localizedDescription)
             hud.flashAndHide()
+        }
+    }
+
+    /// Briefly shows a message in the HUD pill without changing the phase.
+    private func flashNotice(_ message: String) {
+        notice = message
+        hud.flashAndHide(after: 2.5)
+    }
+
+    /// Off by default. `defaults write com.jesseboyes.bardic debugSaveAudio -bool YES` keeps the
+    /// last 20 recordings in ~/Library/Application Support/Bardic/DebugAudio for diagnosing problems.
+    private func saveDebugAudio(_ samples: [Float], outcome: String) {
+        guard UserDefaults.standard.bool(forKey: "debugSaveAudio") else { return }
+        let dir = Paths.appSupport.appendingPathComponent("DebugAudio", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let stamp = Date().formatted(.iso8601.year().month().day().time(includingFractionalSeconds: false))
+            .replacingOccurrences(of: ":", with: "")
+        try? AudioRecorder.writeWAV(samples, to: dir.appendingPathComponent("\(stamp)-\(outcome).wav"))
+        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        for old in files.sorted(by: { $0.lastPathComponent > $1.lastPathComponent }).dropFirst(20) {
+            try? FileManager.default.removeItem(at: old)
         }
     }
 

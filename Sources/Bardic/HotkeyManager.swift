@@ -105,7 +105,7 @@ final class HotkeyManager {
             armedTrigger = trigger
             isDown = false
             lastTapAt = .distantPast
-            if active { onEvent?(.cancel) }
+            if active { cancel("dictation key changed") }
             reset()
         }
         guard e.keyCode == trigger.keyCode else { return }
@@ -133,7 +133,7 @@ final class HotkeyManager {
                 } else {
                     lastTapAt = Date()
                     active = false
-                    onEvent?(.cancel)
+                    cancel(String(format: "quick tap (%.2fs)", held))
                 }
             } else {
                 active = false
@@ -146,11 +146,16 @@ final class HotkeyManager {
         guard active else { return }
         if e.keyCode == 53 { // Escape cancels any recording
             reset()
-            onEvent?(.cancel)
+            cancel("Esc")
         } else if isDown && !handsFree {
             // Another key pressed while holding the modifier: it's a shortcut, not dictation.
             active = false
-            onEvent?(.cancel)
+            cancel("key \(e.keyCode) pressed while holding")
         }
+    }
+
+    private func cancel(_ reason: String) {
+        AppState.log.notice("hotkey: cancel (\(reason, privacy: .public))")
+        onEvent?(.cancel)
     }
 }

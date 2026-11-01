@@ -88,6 +88,29 @@ public final class AudioRecorder {
         return sqrt(sum / Float(x.count))
     }
 
+    public static func peak(_ x: [Float]) -> Float {
+        x.reduce(0) { max($0, abs($1)) }
+    }
+
+    /// Level in dBFS (0 = full scale), for logs.
+    public static func dB(_ level: Float) -> Int {
+        Int((20 * log10(max(level, 1e-6))).rounded())
+    }
+
+    /// Writes 16 kHz mono samples as a WAV file (debugging aid).
+    public static func writeWAV(_ samples: [Float], to url: URL) throws {
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1,
+                                   interleaved: false)!
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count))
+        else { return }
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        samples.withUnsafeBufferPointer { src in
+            buffer.floatChannelData![0].update(from: src.baseAddress!, count: samples.count)
+        }
+        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        try file.write(from: buffer)
+    }
+
     public enum RecorderError: LocalizedError {
         case noInputDevice
         public var errorDescription: String? { "No microphone input device is available." }
