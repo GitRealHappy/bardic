@@ -33,7 +33,9 @@ echo "▸ Checking the repo…"
 [[ -z "$(git status --porcelain)" ]] || fail "Commit or stash your changes first (git status)."
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null && fail "Tag $TAG already exists."
 gh auth status >/dev/null 2>&1 || fail "GitHub CLI isn't logged in (gh auth login)."
-git remote get-url origin >/dev/null 2>&1 || fail "No 'origin' remote. Create the GitHub repo first."
+if (( ! DRY_RUN )); then
+  git remote get-url origin >/dev/null 2>&1 || fail "No 'origin' remote. Create the GitHub repo first."
+fi
 
 # Release notes: this version's CHANGELOG section.
 NOTES_BODY="$(awk -v v="## $NEW_VERSION" '
