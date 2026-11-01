@@ -27,6 +27,8 @@ hold ⌥ (right) ─► mic (AVAudioEngine, 16 kHz mono)
 ```sh
 scripts/build-app.sh --open      # build, sign, install to ~/Applications/Whiskr Flow.app, launch
 scripts/build-app.sh --no-install   # build and sign only; output is build/Whiskr Flow.app
+scripts/build-app.sh --no-install --dmg       # also package build/Whiskr-Flow-<version>.dmg
+scripts/build-app.sh --no-install --notarize  # DMG + Apple notarization (needs Developer ID, see below)
 ```
 
 The script does the following:
@@ -34,9 +36,15 @@ The script does the following:
 2. Assembles the `.app`, including the resource bundles. `mlx-swift_Cmlx.bundle` contains the Metal
    shader library.
 3. Writes `Info.plist`.
-4. Signs the app with the first "Apple Development" identity in your keychain. Override this with
-   `SIGN_IDENTITY="…"`. If no identity is found, it falls back to ad-hoc signing.
+4. Signs the app with the hardened runtime and `scripts/WhiskrFlow.entitlements` (microphone access).
+   It uses a "Developer ID Application" identity if your keychain has one, otherwise the first "Apple
+   Development" identity, otherwise ad-hoc. Override this with `SIGN_IDENTITY="…"`. `BUNDLE_ID` and
+   `VERSION` can be overridden the same way.
 5. Installs the app to `~/Applications`.
+6. With `--dmg`, packages the app as a drag-to-Applications disk image. With `--notarize`, it also submits
+   the DMG to Apple with `notarytool` and staples the ticket. Notarization needs a Developer ID
+   certificate and a stored keychain profile; create the profile once with
+   `xcrun notarytool store-credentials whiskr-notary --apple-id <email> --team-id <team>`.
 
 macOS permissions (TCC) are kept across rebuilds only while the bundle ID (`com.jesseboyes.whiskrflow`),
 signing identity and install path stay the same. With ad-hoc signing, you must re-grant permissions
@@ -44,10 +52,14 @@ after every build.
 
 ### First launch
 
-1. Allow **Microphone** when prompted.
+A setup window walks through the steps below. Reopen it any time with the **?** button in the menu bar
+dropdown. If both permissions are already granted, for example after an upgrade, it doesn't appear.
+
+1. Allow **Microphone**.
 2. Allow **Accessibility** under System Settings › Privacy & Security › Accessibility. It's needed for the
    global hotkey and for pasting. The app picks up the change within about 2 seconds, with no relaunch.
-3. Wait for the models. The menu bar icon shows progress.
+3. Pick the dictation key and try it out in the setup window.
+4. Wait for the models. The setup window and the menu bar icon show progress.
    - The first run downloads about 630 MB of Whisper and about 1.8 GB of Qwen from Hugging Face.
    - Core ML then compiles Whisper for the Neural Engine. This happens once and can take several
      minutes.
@@ -62,11 +74,17 @@ after every build.
 | Cancel | **Esc**, or press any other key while holding (it was a shortcut) |
 | Start/stop without the key | Menu bar icon › Start dictation |
 | Re-copy a past dictation | Menu bar icon › Recent (click to copy), or Settings › History |
-| Change key, models, language | Menu bar icon › Settings |
+| Change the dictation key | Menu bar icon › Push-to-talk key, or Settings › General |
+| Change models, language | Menu bar icon › Settings |
+| Setup guide | Menu bar icon › **?** |
 | Names & jargon | Settings › Dictionary. This biases both Whisper and the LLM. |
 
-The trigger key can be Right Option, Right Command, Right Control, or Fn/Globe. If you choose Fn, set
-System Settings › Keyboard › "Press 🌐 key to" to "Do Nothing".
+The trigger key can be Right Option, Right Command, Right Control, or Fn/Globe. The change applies
+immediately. If you choose Fn, set System Settings › Keyboard › "Press 🌐 key to" to "Do Nothing".
+
+The app watches only the right-hand key, so holding the left Option or Command key for shortcuts never
+starts dictation. Left-side keys are deliberately not offered, because every ⌘C would briefly turn on the
+mic.
 
 **Voice commands:**
 - Formatting: "new line", "new paragraph", "bullet point"
@@ -136,6 +154,7 @@ You can make a quick spoken test file with
   - `HotkeyManager`: hold, double-tap and cancel logic, using NSEvent global monitors.
   - `TextInserter`: pastes the text, then restores the clipboard.
   - `HUD`: the floating listening/processing pill.
+  - `Onboarding`: the first-run setup window.
   - `WhiskrFlowApp`: the menu.
   - `SettingsView`
   - `Permissions`
@@ -191,20 +210,29 @@ harmless in the Swift 5 language mode the package uses.
 
 This is a working personal build. Before other people can use it, the following needs to be done:
 
-- [ ] **Distribution signing.** Sign with a Developer ID Application certificate, enable hardened
-  runtime with the `com.apple.security.device.audio-input` entitlement, then notarize and staple the
-  app. Package it as a DMG. Apple Development signing only works on your own Macs.
-- [ ] **Bundle ID and naming.** Replace `com.jesseboyes.whiskrflow` (used in `scripts/build-app.sh`,
-  `AppState` logging and the docs) with the final identifier.
+- [ ] **Distribution signing.** The pipeline is ready: hardened runtime, the audio-input entitlement,
+  `--dmg` and `--notarize`. The full pipeline (Core ML, MLX Metal, cleanup) was verified under the
+  hardened runtime. What's missing is a Developer ID Application certificate, which requires the paid
+  Apple Developer Program. Apple Development signing only works on your own Macs.
+- [ ] **Bundle ID and naming.** Pick the final name and identifier, then pass it as `BUNDLE_ID` (or change
+  the default in `scripts/build-app.sh`) and update the docs. Logging follows the bundle automatically.
+  Changing it resets permissions and settings for existing installs.
 - [ ] **Model licenses.** Check the license of each bundled or downloaded model before redistributing.
   - Qwen 2.5 **3B** has its own Qwen license terms, which differ from the Apache-2.0 1.5B and 7B models.
   - Llama 3.2 uses Meta's community license.
   - Whisper is MIT.
   - Choose the default model accordingly.
-- [ ] **Onboarding.** Add a first-run window that walks through permissions and shows model download
-  progress. Today this is only shown in the menu bar.
+- [x] **Onboarding.** A first-run window covers permissions, the key choice, a try-it box and model
+  download progress.
+- [x] **Hotkey from the menu bar.** The push-to-talk key picker is in the dropdown.
 - [ ] **Updates.** For example, Sparkle.
-- [ ] **Hardware check.** Detect Intel Macs and low-RAM machines, and pick smaller models automatically.
+- [ ] **Hardware check.**
+  - Done: Macs with 8 GB or less default to the 1.5B cleanup model.
+  - The binary is arm64-only, so Intel Macs can't open it at all. The DMG page should say "Apple Silicon
+    only".
+  - Possibly: a friendlier message for very old macOS versions.
 - [ ] **Speed.** Whisper is now about 70% of latency. Options are streaming transcription while the key
   is held, or a smaller or distilled model.
+- [ ] **Custom key combos.** For example ⌃⌥Space. This needs Carbon `RegisterEventHotKey` or a
+  `CGEventTap`, because NSEvent monitors can't swallow the key.
 - [ ] **Quality.** A leading "So" without a comma can survive cleanup. Grow the fixtures with real usage.
