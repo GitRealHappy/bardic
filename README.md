@@ -318,9 +318,27 @@ the license and notice of every bundled package. Open it from Settings › About
 
 ## Status and road to sharing
 
-This build works well on the author's Mac (M1 Pro). Version 0.2.0 is the first public release. It
-adds an icon, an About tab with debug info, an update check, and a sturdier first run. It also adds a
-release script.
+The current release is **0.2.1** (2026-11-01). 0.2.0 was the first public release: it added the icon,
+the About tab with debug info, the update check, a sturdier first run, and the release script. 0.2.1
+fixed the disk image being blocked when opened, plus an offline-Retry bug. See `CHANGELOG.md`.
+
+**Tested so far**, all on the author's M1 Pro:
+- The cleanup eval scores 10/10.
+- A fresh Whisper download showed its progress percentage and took about 3 minutes. The Neural Engine
+  compile that follows took about 9 minutes.
+- The update check correctly read the live release.
+- The 0.2.1 DMG, downloaded from GitHub and quarantined, mounts with no warning. The app inside is
+  signed.
+
+**Not tested yet**
+- The "update available" notice, from 0.2.0 to 0.2.1.
+- Whether Accessibility stays granted after installing an update.
+- Retry while offline, and recovery from a damaged download.
+- A fresh install from a second user account or on a friend's Mac, including the first-time fetch of
+  the Whisper tokenizer.
+
+Note: `build-app.sh` installs to `~/Applications`, while the DMG points friends to `/Applications`. Keep
+only one copy installed, or two will listen for the hotkey.
 
 **Decisions made**
 - **Name:** Bardic (`com.jesseboyes.bardic`). Override it with `BUNDLE_ID` if you get your own domain.
@@ -363,3 +381,5 @@ The install steps are on the release page and in the DMG.
   exits (key, Esc, pill buttons), and a menu bar that stays clickable while recording.
 - [x] 0.2.0: icon, About tab with debug info, download progress and Retry, disk check, and recovery
   from damaged downloads.
+- [x] 0.2.1: unsigned DMG, so it opens without a warning; no model deletion when Retry runs offline;
+  clearer first-compile message.
