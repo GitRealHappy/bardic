@@ -1,14 +1,14 @@
-// whiskr-cli — exercise the Whiskr Flow pipeline from the terminal.
+// bardic-cli — exercise the Bardic pipeline from the terminal.
 //
-//   whiskr-cli transcribe <audio-file>        Whisper + LLM cleanup on an audio file
-//   whiskr-cli clean "<raw text>" [style]     LLM cleanup only (style: standard|casual|formal|code)
-//   whiskr-cli eval                           run the cleanup fixtures and report pass/fail
+//   bardic-cli transcribe <audio-file>        Whisper + LLM cleanup on an audio file
+//   bardic-cli clean "<raw text>" [style]     LLM cleanup only (style: standard|casual|formal|code)
+//   bardic-cli eval                           run the cleanup fixtures and report pass/fail
 //
-// Env: WHISKR_LLM=<model id> picks the cleanup model; WHISKR_NO_CACHE=1 disables the prompt cache.
+// Env: BARDIC_LLM=<model id> picks the cleanup model; BARDIC_NO_CACHE=1 disables the prompt cache.
 
 import AVFoundation
 import Foundation
-import WhiskrCore
+import BardicCore
 
 func log(_ s: String) { FileHandle.standardError.write((s + "\n").data(using: .utf8)!) }
 
@@ -62,13 +62,13 @@ let fixtures: [Fixture] = [
 
 let args = CommandLine.arguments.dropFirst()
 let command = args.first ?? "help"
-let cleaner = Cleaner(usePromptCache: ProcessInfo.processInfo.environment["WHISKR_NO_CACHE"] == nil)
-let model = CleanupModel(rawValue: ProcessInfo.processInfo.environment["WHISKR_LLM"] ?? "") ?? .qwen25_3B
+let cleaner = Cleaner(usePromptCache: ProcessInfo.processInfo.environment["BARDIC_NO_CACHE"] == nil)
+let model = CleanupModel(rawValue: ProcessInfo.processInfo.environment["BARDIC_LLM"] ?? "") ?? .qwen25_3B
 
 do {
     switch command {
     case "transcribe":
-        guard let path = args.dropFirst().first else { log("usage: whiskr-cli transcribe <file>"); exit(2) }
+        guard let path = args.dropFirst().first else { log("usage: bardic-cli transcribe <file>"); exit(2) }
         let transcriber = Transcriber()
         var t0 = Date()
         try await transcriber.load(.largeV3Turbo) { log($0) }
@@ -86,7 +86,7 @@ do {
         log(String(format: "audio %.1fs | whisper %.2fs | llm %.2fs", Double(audio.count) / 16_000, tASR, tLLM))
 
     case "clean":
-        guard let raw = args.dropFirst().first else { log("usage: whiskr-cli clean \"text\" [style]"); exit(2) }
+        guard let raw = args.dropFirst().first else { log("usage: bardic-cli clean \"text\" [style]"); exit(2) }
         let style = DictationStyle(rawValue: args.dropFirst(2).first ?? "") ?? .standard
         try await cleaner.load(model) { log($0) }
         let t0 = Date()
@@ -116,8 +116,8 @@ do {
         print("\n\(passed)/\(fixtures.count) passed (\(model.rawValue))")
 
     default:
-        log("usage: whiskr-cli transcribe <file> | clean \"text\" [style] | eval")
-        log("set WHISKR_LLM=<mlx-community model id> to try another cleanup model")
+        log("usage: bardic-cli transcribe <file> | clean \"text\" [style] | eval")
+        log("set BARDIC_LLM=<mlx-community model id> to try another cleanup model")
     }
 } catch {
     log("error: \(error.localizedDescription)")

@@ -1,5 +1,5 @@
 import SwiftUI
-import WhiskrCore
+import BardicCore
 
 struct SettingsView: View {
     @EnvironmentObject var state: AppState

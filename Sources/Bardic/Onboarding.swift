@@ -17,7 +17,7 @@ final class OnboardingController: NSObject, NSWindowDelegate {
             let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 460),
                              styleMask: [.titled, .closable, .fullSizeContentView],
                              backing: .buffered, defer: false)
-            w.title = "Welcome to Whiskr Flow"
+            w.title = "Welcome to Bardic"
             w.titlebarAppearsTransparent = true
             w.isReleasedWhenClosed = false
             w.delegate = self
@@ -99,7 +99,7 @@ struct OnboardingView: View {
     private var permissions: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Two permissions").font(.title.bold())
-            Text("Whiskr Flow needs these to hear you and to type into other apps.")
+            Text("Bardic needs these to hear you and to type into other apps.")
                 .foregroundStyle(.secondary)
 
             permissionRow(
@@ -118,7 +118,7 @@ struct OnboardingView: View {
             permissionRow(
                 granted: state.accessibilityGranted, icon: "hand.raised",
                 title: "Accessibility",
-                detail: "Lets the dictation key work in every app and pastes the text at your cursor. Turn on Whiskr Flow in the list that opens.",
+                detail: "Lets the dictation key work in every app and pastes the text at your cursor. Turn on Bardic in the list that opens.",
                 action: "Open Settings"
             ) {
                 // The system prompt adds the app to the Accessibility list and links to it; after

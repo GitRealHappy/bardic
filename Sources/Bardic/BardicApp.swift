@@ -1,11 +1,16 @@
 import AppKit
 import SwiftUI
-import WhiskrCore
+import BardicCore
 
 @main
-struct WhiskrFlowApp: App {
+struct BardicApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var state = AppState.shared
+
+    init() {
+        // Before any @AppStorage is read.
+        AppState.migrateLegacySettings()
+    }
 
     var body: some Scene {
         MenuBarExtra {
@@ -15,7 +20,7 @@ struct WhiskrFlowApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("Whiskr Flow Settings", id: "settings") {
+        Window("Bardic Settings", id: "settings") {
             SettingsView().environmentObject(state)
         }
         .windowResizability(.contentSize)
@@ -48,7 +53,7 @@ struct MenuContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Whiskr Flow").font(.headline)
+                Text("Bardic").font(.headline)
                 Spacer()
                 statusBadge
             }

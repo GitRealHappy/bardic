@@ -1,6 +1,6 @@
-# Whiskr Flow
+# Bardic
 
-Local, private AI voice dictation for macOS, in the spirit of Wispr Flow. Hold a key, talk, and
+Local, private AI voice dictation for macOS. Hold a key, talk, and
 polished text appears wherever your cursor is. Fillers are removed, self-corrections are applied
 ("Tuesday, no wait, Wednesday" becomes "Wednesday"), and punctuation, lists, emails and times are
 formatted. Everything runs on your Mac: no account, no cloud, and it works offline after the first
@@ -25,9 +25,9 @@ hold ⌥ (right) ─► mic (AVAudioEngine, 16 kHz mono)
 ## Build & install
 
 ```sh
-scripts/build-app.sh --open      # build, sign, install to ~/Applications/Whiskr Flow.app, launch
-scripts/build-app.sh --no-install   # build and sign only; output is build/Whiskr Flow.app
-scripts/build-app.sh --no-install --dmg       # also package build/Whiskr-Flow-<version>.dmg
+scripts/build-app.sh --open      # build, sign, install to ~/Applications/Bardic.app, launch
+scripts/build-app.sh --no-install   # build and sign only; output is build/Bardic.app
+scripts/build-app.sh --no-install --dmg       # also package build/Bardic-<version>.dmg
 scripts/build-app.sh --no-install --notarize  # DMG + Apple notarization (needs Developer ID, see below)
 ```
 
@@ -36,7 +36,7 @@ The script does the following:
 2. Assembles the `.app`, including the resource bundles. `mlx-swift_Cmlx.bundle` contains the Metal
    shader library.
 3. Writes `Info.plist`.
-4. Signs the app with the hardened runtime and `scripts/WhiskrFlow.entitlements` (microphone access).
+4. Signs the app with the hardened runtime and `scripts/Bardic.entitlements` (microphone access).
    It uses a "Developer ID Application" identity if your keychain has one, otherwise the first "Apple
    Development" identity, otherwise ad-hoc. Override this with `SIGN_IDENTITY="…"`. `BUNDLE_ID` and
    `VERSION` can be overridden the same way.
@@ -44,9 +44,9 @@ The script does the following:
 6. With `--dmg`, packages the app as a drag-to-Applications disk image. With `--notarize`, it also submits
    the DMG to Apple with `notarytool` and staples the ticket. Notarization needs a Developer ID
    certificate and a stored keychain profile; create the profile once with
-   `xcrun notarytool store-credentials whiskr-notary --apple-id <email> --team-id <team>`.
+   `xcrun notarytool store-credentials bardic-notary --apple-id <email> --team-id <team>`.
 
-macOS permissions (TCC) are kept across rebuilds only while the bundle ID (`com.jesseboyes.whiskrflow`),
+macOS permissions (TCC) are kept across rebuilds only while the bundle ID (`com.jesseboyes.bardic`),
 signing identity and install path stay the same. With ad-hoc signing, you must re-grant permissions
 after every build.
 
@@ -96,7 +96,7 @@ mic.
 - Mail, Outlook, Word and Pages get a formal tone.
 - Xcode, VS Code, Cursor, Zed, JetBrains IDEs and terminals keep commands and identifiers literal.
 
-The mapping is in `DictationStyle.forBundleID` in `Sources/WhiskrCore/CleanupPrompt.swift`.
+The mapping is in `DictationStyle.forBundleID` in `Sources/BardicCore/CleanupPrompt.swift`.
 
 **Safety net.** If the model output looks like it answered or expanded what you said, the raw Whisper
 transcript is pasted instead. For example, it won't answer "what's the capital of France". The check is
@@ -124,60 +124,60 @@ The app uses roughly 1.8 GB of memory once both models are loaded.
 
 ```sh
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-xcodebuild -scheme whiskr-cli -configuration Release -destination 'platform=macOS,arch=arm64' \
+xcodebuild -scheme bardic-cli -configuration Release -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath build/DerivedData -skipMacroValidation -skipPackagePluginValidation build
-CLI=build/DerivedData/Build/Products/Release/whiskr-cli
+CLI=build/DerivedData/Build/Products/Release/bardic-cli
 
 $CLI eval                                   # cleanup fixtures: pass/fail + latency (currently 10/10)
 $CLI clean "um so send it tuesday no wait wednesday" casual   # styles: standard|casual|formal|code
 $CLI transcribe recording.m4a               # Whisper + cleanup on an audio file, with timings
-WHISKR_LLM=mlx-community/Qwen2.5-7B-Instruct-4bit $CLI eval   # try another cleanup model
-WHISKR_NO_CACHE=1 $CLI eval                 # disable the prompt cache (A/B check)
+BARDIC_LLM=mlx-community/Qwen2.5-7B-Instruct-4bit $CLI eval   # try another cleanup model
+BARDIC_NO_CACHE=1 $CLI eval                 # disable the prompt cache (A/B check)
 ```
 
-Run `eval` after any prompt change. The fixtures are in `Sources/WhiskrCLI/main.swift`.
+Run `eval` after any prompt change. The fixtures are in `Sources/BardicCLI/main.swift`.
 
 You can make a quick spoken test file with
 `say -o test.aiff "Um, so let's meet Thursday, no wait, Friday."`.
 
 ## Code layout
 
-- **`Sources/WhiskrCore`** is the pipeline, shared by the app and the CLI.
+- **`Sources/BardicCore`** is the pipeline, shared by the app and the CLI.
   - `AudioRecorder`: mic capture and conversion to 16 kHz mono, plus the level meter.
   - `Transcriber`: WhisperKit. It loads from disk when the model is present, so it works offline.
   - `Cleaner`: the MLX LLM, with the prompt-prefix KV cache.
   - `CleanupPrompt`: the system prompt, few-shot examples, per-app styles, the output guard and the
     leading-filler stripper.
   - `Models`: model choices and paths.
-- **`Sources/WhiskrFlow`** is the menu-bar app.
+- **`Sources/Bardic`** is the menu-bar app.
   - `AppState`: the dictation pipeline, settings and history.
   - `HotkeyManager`: hold, double-tap and cancel logic, using NSEvent global monitors.
   - `TextInserter`: pastes the text, then restores the clipboard.
   - `HUD`: the floating listening/processing pill.
   - `Onboarding`: the first-run setup window.
-  - `WhiskrFlowApp`: the menu.
+  - `BardicApp`: the menu.
   - `SettingsView`
   - `Permissions`
-- **`Sources/WhiskrCLI`** is the test harness and fixtures.
+- **`Sources/BardicCLI`** is the test harness and fixtures.
 - **`scripts/build-app.sh`** builds, bundles, signs and installs.
 
 ## Where data lives
 
 | What | Path |
 |---|---|
-| Whisper models | `~/Library/Application Support/WhiskrFlow/SpeechModels` |
+| Whisper models | `~/Library/Application Support/Bardic/SpeechModels` |
 | LLM models | `~/Library/Caches/models/mlx-community/…` |
-| History (local only, clearable in Settings) | `~/Library/Application Support/WhiskrFlow/history.json` |
-| Settings | `defaults read com.jesseboyes.whiskrflow` |
+| History (local only, clearable in Settings) | `~/Library/Application Support/Bardic/history.json` |
+| Settings | `defaults read com.jesseboyes.bardic` |
 
 ## Troubleshooting
 
 - **See what the app is doing:** run
-  `/usr/bin/log stream --predicate 'subsystem == "com.jesseboyes.whiskrflow"'`. Every phase change is
+  `/usr/bin/log stream --predicate 'subsystem == "com.jesseboyes.bardic"'`. Every phase change is
   logged, for example `phase: idle`. In zsh, use `/usr/bin/log` because `log` is a shell builtin.
 - **Hotkey does nothing:** Accessibility isn't granted, or the grant belongs to an older signature.
-  Remove Whiskr Flow from the Accessibility list and add it again. To reset it from the terminal, run
-  `tccutil reset Accessibility com.jesseboyes.whiskrflow`.
+  Remove Bardic from the Accessibility list and add it again. To reset it from the terminal, run
+  `tccutil reset Accessibility com.jesseboyes.bardic`.
 - **The orange mic dot flashes when I use Option shortcuts:** this is expected. Pressing the trigger key
   starts the mic, and a quick tap cancels it.
 - **Changed models or turned AI cleanup on, but nothing happened:** press Settings › Models ›
@@ -185,13 +185,30 @@ You can make a quick spoken test file with
 - **The first launch seems stuck on "Loading speech model":** the one-time Neural Engine compile is
   running. Give it a few minutes.
 
+## Upgrading from Whiskr Flow
+
+The app used to be called Whiskr Flow, with the bundle ID `com.jesseboyes.whiskrflow`. On first launch,
+Bardic does the following:
+- It moves `~/Library/Application Support/WhiskrFlow`, which holds the Whisper models and history, to
+  `…/Bardic`, so nothing is downloaded again.
+- It copies your settings, including the key, the models and the dictionary.
+
+`scripts/build-app.sh` removes the old `~/Applications/Whiskr Flow.app`.
+
+macOS treats Bardic as a new app, so you need to:
+- Grant Microphone and Accessibility again. The setup window walks you through it.
+- Re-enable "Launch at login" if you used it.
+
+To clear the old app's leftover permission entries and settings, run:
+`tccutil reset All com.jesseboyes.whiskrflow; defaults delete com.jesseboyes.whiskrflow`.
+
 ## Uninstall
 
 ```sh
-rm -rf ~/Applications/"Whiskr Flow.app" ~/Library/Application\ Support/WhiskrFlow \
+rm -rf ~/Applications/"Bardic.app" ~/Library/Application\ Support/Bardic \
        ~/Library/Caches/models/mlx-community/Qwen2.5-3B-Instruct-4bit
-defaults delete com.jesseboyes.whiskrflow
-tccutil reset All com.jesseboyes.whiskrflow
+defaults delete com.jesseboyes.bardic
+tccutil reset All com.jesseboyes.bardic
 ```
 
 ## Version pins
@@ -214,9 +231,8 @@ This is a working personal build. Before other people can use it, the following 
   `--dmg` and `--notarize`. The full pipeline (Core ML, MLX Metal, cleanup) was verified under the
   hardened runtime. What's missing is a Developer ID Application certificate, which requires the paid
   Apple Developer Program. Apple Development signing only works on your own Macs.
-- [ ] **Bundle ID and naming.** Pick the final name and identifier, then pass it as `BUNDLE_ID` (or change
-  the default in `scripts/build-app.sh`) and update the docs. Logging follows the bundle automatically.
-  Changing it resets permissions and settings for existing installs.
+- [x] **Bundle ID and naming.** The app is now Bardic (`com.jesseboyes.bardic`). Override it with
+  `BUNDLE_ID` if you get your own domain. Logging follows the bundle automatically.
 - [ ] **Model licenses.** Check the license of each bundled or downloaded model before redistributing.
   - Qwen 2.5 **3B** (the current default) is under the **Qwen Research License**: non-commercial use
     only. Redistributing it requires shipping the license text and the notice "Qwen is licensed under

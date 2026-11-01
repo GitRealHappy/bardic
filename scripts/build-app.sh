@@ -1,12 +1,12 @@
 #!/bin/zsh
-# Builds Whiskr Flow, assembles "Whiskr Flow.app", signs it, and installs it to ~/Applications.
+# Builds Bardic, assembles "Bardic.app", signs it, and installs it to ~/Applications.
 #
 # Usage: scripts/build-app.sh [--no-install] [--open] [--dmg] [--notarize]
 #
-#   --dmg        also package build/Whiskr-Flow-<version>.dmg for sharing
+#   --dmg        also package build/Bardic-<version>.dmg for sharing
 #   --notarize   submit the DMG to Apple and staple the ticket (implies --dmg). Needs a
 #                "Developer ID Application" certificate and a notarytool keychain profile:
-#                  xcrun notarytool store-credentials whiskr-notary --apple-id … --team-id …
+#                  xcrun notarytool store-credentials bardic-notary --apple-id … --team-id …
 #
 # Environment overrides: SIGN_IDENTITY, BUNDLE_ID, VERSION, NOTARY_PROFILE.
 #
@@ -18,11 +18,11 @@ ROOT="${0:A:h:h}"
 cd "$ROOT"
 
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
-APP_NAME="Whiskr Flow"
-BUNDLE_ID="${BUNDLE_ID:-com.jesseboyes.whiskrflow}"
+APP_NAME="Bardic"
+BUNDLE_ID="${BUNDLE_ID:-com.jesseboyes.bardic}"
 VERSION="${VERSION:-0.1.0}"
-NOTARY_PROFILE="${NOTARY_PROFILE:-whiskr-notary}"
-ENTITLEMENTS="$ROOT/scripts/WhiskrFlow.entitlements"
+NOTARY_PROFILE="${NOTARY_PROFILE:-bardic-notary}"
+ENTITLEMENTS="$ROOT/scripts/Bardic.entitlements"
 INSTALL_DIR="$HOME/Applications"
 DERIVED="$ROOT/build/DerivedData"
 PRODUCTS="$DERIVED/Build/Products/Release"
@@ -41,15 +41,15 @@ for arg in "$@"; do
 done
 
 echo "▸ Building (Release)…"
-xcodebuild -scheme WhiskrFlow -configuration Release -destination 'platform=macOS,arch=arm64' \
+xcodebuild -scheme Bardic -configuration Release -destination 'platform=macOS,arch=arm64' \
   -derivedDataPath "$DERIVED" -skipMacroValidation -skipPackagePluginValidation build \
   | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
-[[ -x "$PRODUCTS/WhiskrFlow" ]] || { echo "Build failed"; exit 1; }
+[[ -x "$PRODUCTS/Bardic" ]] || { echo "Build failed"; exit 1; }
 
 echo "▸ Assembling $APP_NAME.app…"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$PRODUCTS/WhiskrFlow" "$APP/Contents/MacOS/WhiskrFlow"
+cp "$PRODUCTS/Bardic" "$APP/Contents/MacOS/Bardic"
 for b in "$PRODUCTS"/*.bundle(N); do
   cp -R "$b" "$APP/Contents/Resources/"
 done
@@ -64,14 +64,14 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>$APP_NAME</string>
   <key>CFBundleDisplayName</key><string>$APP_NAME</string>
   <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
-  <key>CFBundleExecutable</key><string>WhiskrFlow</string>
+  <key>CFBundleExecutable</key><string>Bardic</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$(date +%Y%m%d%H%M)</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSMicrophoneUsageDescription</key><string>Whiskr Flow listens while you hold the dictation key and turns your speech into text. Audio never leaves this Mac.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Bardic listens while you hold the dictation key and turns your speech into text. Audio never leaves this Mac.</string>
 </dict>
 </plist>
 PLIST
@@ -124,7 +124,13 @@ fi
 if (( INSTALL )); then
   echo "▸ Installing to $INSTALL_DIR…"
   mkdir -p "$INSTALL_DIR"
-  pkill -x WhiskrFlow 2>/dev/null && sleep 0.5 || true
+  pkill -x Bardic 2>/dev/null && sleep 0.5 || true
+  # Replace the build from before the rename, so two copies don't both listen for the hotkey.
+  if [[ -d "$INSTALL_DIR/Whiskr Flow.app" ]]; then
+    echo "  removing the old Whiskr Flow.app"
+    pkill -x WhiskrFlow 2>/dev/null && sleep 0.5 || true
+    rm -rf "$INSTALL_DIR/Whiskr Flow.app"
+  fi
   rm -rf "$INSTALL_DIR/$APP_NAME.app"
   cp -R "$APP" "$INSTALL_DIR/"
   APP="$INSTALL_DIR/$APP_NAME.app"

@@ -3,7 +3,7 @@ import Combine
 import OSLog
 import ServiceManagement
 import SwiftUI
-import WhiskrCore
+import BardicCore
 
 struct HistoryItem: Codable, Identifiable {
     var id = UUID()
@@ -26,7 +26,7 @@ enum Phase: Equatable {
 @MainActor
 final class AppState: ObservableObject {
     static let shared = AppState()
-    static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "whiskrflow", category: "app")
+    static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "bardic", category: "app")
 
     // Persisted preferences
     @AppStorage("triggerKey") var triggerKeyRaw = TriggerKey.rightOption.rawValue
@@ -79,6 +79,21 @@ final class AppState: ObservableObject {
     }
 
     // MARK: - Startup
+
+    /// The app used to be called Whiskr Flow, with a different bundle ID and so a separate
+    /// preferences domain. Copy the user's choices (key, models, dictionary…) over once.
+    /// Onboarding state is deliberately not copied: macOS permissions don't carry over to the new ID.
+    nonisolated static func migrateLegacySettings() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: "migratedLegacySettings") else { return }
+        defaults.set(true, forKey: "migratedLegacySettings")
+        guard let legacy = UserDefaults(suiteName: "com.jesseboyes.whiskrflow") else { return }
+        let keys = ["triggerKey", "speechModel", "cleanupModel", "aiCleanup", "contextAware",
+                    "vocabulary", "language", "addTrailingSpace"]
+        for key in keys where defaults.object(forKey: key) == nil {
+            if let value = legacy.object(forKey: key) { defaults.set(value, forKey: key) }
+        }
+    }
 
     func start() {
         chooseDefaultModelsForThisMac()

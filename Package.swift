@@ -1,5 +1,5 @@
 // swift-tools-version: 6.0
-// Whiskr Flow — local AI voice dictation for macOS.
+// Bardic — local AI voice dictation for macOS.
 //
 // Versions are pinned to releases that build with Xcode 16.3 / Swift 6.1.
 // Newer mlx-swift (>= 0.31.5) and mlx-swift-lm (>= 3.32) require Swift 6.2+.
@@ -7,11 +7,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "WhiskrFlow",
+    name: "Bardic",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "WhiskrFlow", targets: ["WhiskrFlow"]),
-        .executable(name: "whiskr-cli", targets: ["WhiskrCLI"]),
+        .executable(name: "Bardic", targets: ["Bardic"]),
+        .executable(name: "bardic-cli", targets: ["BardicCLI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/argmaxinc/WhisperKit", exact: "1.1.1"),
@@ -20,7 +20,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "WhiskrCore",
+            name: "BardicCore",
             dependencies: [
                 .product(name: "WhisperKit", package: "WhisperKit"),
                 .product(name: "MLX", package: "mlx-swift"),
@@ -29,12 +29,12 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "WhiskrFlow",
-            dependencies: ["WhiskrCore"]
+            name: "Bardic",
+            dependencies: ["BardicCore"]
         ),
         .executableTarget(
-            name: "WhiskrCLI",
-            dependencies: ["WhiskrCore"]
+            name: "BardicCLI",
+            dependencies: ["BardicCore"]
         ),
     ],
     swiftLanguageModes: [.v5]

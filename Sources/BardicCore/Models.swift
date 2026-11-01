@@ -37,13 +37,19 @@ public enum CleanupModel: String, CaseIterable, Identifiable, Sendable {
 }
 
 public enum Paths {
-    /// ~/Library/Application Support/WhiskrFlow
-    public static var appSupport: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let dir = base.appendingPathComponent("WhiskrFlow", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    /// ~/Library/Application Support/Bardic
+    public static let appSupport: URL = {
+        let fm = FileManager.default
+        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let dir = base.appendingPathComponent("Bardic", isDirectory: true)
+        // The app used to be called Whiskr Flow; move its downloaded models and history over.
+        let legacy = base.appendingPathComponent("WhiskrFlow", isDirectory: true)
+        if !fm.fileExists(atPath: dir.path), fm.fileExists(atPath: legacy.path) {
+            try? fm.moveItem(at: legacy, to: dir)
+        }
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
-    }
+    }()
 
     public static var speechModels: URL {
         let dir = appSupport.appendingPathComponent("SpeechModels", isDirectory: true)
