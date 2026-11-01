@@ -5,6 +5,11 @@ import ServiceManagement
 import SwiftUI
 import BardicCore
 
+@MainActor
+final class LevelMeter: ObservableObject {
+    @Published var level: Float = 0
+}
+
 struct HistoryItem: Codable, Identifiable {
     var id = UUID()
     let date: Date
@@ -42,7 +47,10 @@ final class AppState: ObservableObject {
     @Published var phase: Phase = .loading("Starting…") {
         didSet { if phase != oldValue { AppState.log.notice("phase: \(String(describing: self.phase), privacy: .public)") } }
     }
-    @Published var level: Float = 0
+    /// Mic level for the HUD bars. Kept out of AppState's own @Published properties: it changes
+    /// ~40 times a second, and every AppState change also rebuilds the menu bar button, which then
+    /// drops clicks (the dropdown wouldn't open while recording).
+    let meter = LevelMeter()
     /// Short message shown in the HUD while idle, e.g. when nothing was heard.
     @Published var notice: String?
     @Published var history: [HistoryItem] = []
@@ -110,7 +118,7 @@ final class AppState: ObservableObject {
         recorder.onLevel = { [weak self] rms in
             Task { @MainActor in
                 guard let self else { return }
-                self.level = AudioRecorder.meterLevel(rms)
+                self.meter.level = AudioRecorder.meterLevel(rms)
                 if rms > AudioRecorder.voiceLevel { self.lastVoiceAt = Date() }
             }
         }

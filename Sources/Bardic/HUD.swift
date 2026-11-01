@@ -101,7 +101,7 @@ private struct RecordingStatus: View {
             HStack(spacing: 10) {
                 Circle().fill(.red).frame(width: 8, height: 8)
                     .opacity(quiet ? 0.5 : 1)
-                LevelBars(level: state.level)
+                LiveLevelBars(meter: state.meter)
                     .foregroundStyle(quiet ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
                 Text(Duration.seconds(elapsed).formatted(.time(pattern: .minuteSecond)))
                     .font(.callout.monospacedDigit())
@@ -127,6 +127,12 @@ private struct RecordingStatus: View {
             }
         }
     }
+}
+
+/// Observes only the meter, so the fast level updates redraw the bars and nothing else.
+private struct LiveLevelBars: View {
+    @ObservedObject var meter: LevelMeter
+    var body: some View { LevelBars(level: meter.level) }
 }
 
 struct LevelBars: View {
