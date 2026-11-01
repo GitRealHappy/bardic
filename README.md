@@ -1,10 +1,9 @@
 # Bardic
 
-Local, private AI voice dictation for macOS. Hold a key, talk, and
-polished text appears wherever your cursor is. Fillers are removed, self-corrections are applied
-("Tuesday, no wait, Wednesday" becomes "Wednesday"), and punctuation, lists, emails and times are
-formatted. Everything runs on your Mac: no account, no cloud, and it works offline after the first
-model download.
+Local, private AI voice dictation for macOS. Hold a key, talk, and polished text appears wherever your
+cursor is. Fillers are removed, self-corrections are applied ("Tuesday, no wait, Wednesday" becomes
+"Wednesday"), and punctuation, lists, emails and times are formatted. Everything runs on your Mac: no
+account, no cloud, and it works offline after the first model download.
 
 ```
 hold ⌥ (right) ─► mic (AVAudioEngine, 16 kHz mono)
@@ -79,6 +78,15 @@ dropdown. If both permissions are already granted, for example after an upgrade,
 | Setup guide | Menu bar icon › **?** |
 | Names & jargon | Settings › Dictionary. This biases both Whisper and the LLM. |
 
+**While you're recording**, the pill at the bottom of the screen shows:
+- a running timer
+- level bars that follow your voice
+- an orange **"Can't hear you"** if no voice has been picked up for 2.5 s
+
+If a recording turns out to be silent, or Whisper finds no words, the pill says **"Didn't catch that"**
+instead of disappearing. Raising the input level under System Settings › Sound › Input helps quiet
+voices.
+
 The trigger key can be Right Option, Right Command, Right Control, or Fn/Globe. The change applies
 immediately. If you choose Fn, set System Settings › Keyboard › "Press 🌐 key to" to "Do Nothing".
 
@@ -130,7 +138,7 @@ CLI=build/DerivedData/Build/Products/Release/bardic-cli
 
 $CLI eval                                   # cleanup fixtures: pass/fail + latency (currently 10/10)
 $CLI clean "um so send it tuesday no wait wednesday" casual   # styles: standard|casual|formal|code
-$CLI transcribe recording.m4a               # Whisper + cleanup on an audio file, with timings
+$CLI transcribe a.m4a b.wav                 # Whisper + cleanup on audio files, with speech level and timings
 BARDIC_LLM=mlx-community/Qwen2.5-7B-Instruct-4bit $CLI eval   # try another cleanup model
 BARDIC_NO_CACHE=1 $CLI eval                 # disable the prompt cache (A/B check)
 ```
@@ -143,7 +151,8 @@ You can make a quick spoken test file with
 ## Code layout
 
 - **`Sources/BardicCore`** is the pipeline, shared by the app and the CLI.
-  - `AudioRecorder`: mic capture and conversion to 16 kHz mono, plus the level meter.
+  - `AudioRecorder`: mic capture and conversion to 16 kHz mono. It also does the level maths for the
+    meter, the "can't hear you" check and the silence gate.
   - `Transcriber`: WhisperKit. It loads from disk when the model is present, so it works offline.
   - `Cleaner`: the MLX LLM, with the prompt-prefix KV cache.
   - `CleanupPrompt`: the system prompt, few-shot examples, per-app styles, the output guard and the
@@ -153,7 +162,7 @@ You can make a quick spoken test file with
   - `AppState`: the dictation pipeline, settings and history.
   - `HotkeyManager`: hold, double-tap and cancel logic, using NSEvent global monitors.
   - `TextInserter`: pastes the text, then restores the clipboard.
-  - `HUD`: the floating listening/processing pill.
+  - `HUD`: the floating pill, with the timer, level bars, "can't hear you" warning and notices.
   - `Onboarding`: the first-run setup window.
   - `BardicApp`: the menu.
   - `SettingsView`
@@ -229,38 +238,60 @@ and newer mlx-swift-lm needs 6.2. After upgrading Xcode, these can be bumped; th
 different loading APIs. The build shows a few Swift 6 sendability warnings in `Cleaner.swift`. They are
 harmless in the Swift 5 language mode the package uses.
 
+## Credits and licenses
+
+- [Whisper](https://github.com/openai/whisper) (OpenAI), MIT. It runs through
+  [WhisperKit](https://github.com/argmaxinc/WhisperKit) (Argmax), which is also MIT.
+- [MLX Swift](https://github.com/ml-explore/mlx-swift) and mlx-swift-lm (Apple), MIT.
+- Qwen 2.5 3B Instruct (Alibaba Cloud) is the default cleanup model. It is downloaded by the app from
+  Hugging Face, not bundled. Qwen is licensed under the Qwen RESEARCH LICENSE AGREEMENT, Copyright (c)
+  Alibaba Cloud. All Rights Reserved. **That license is non-commercial, so Bardic must stay free while
+  it uses this model.**
+
 ## Status and road to sharing
 
-This is a working personal build. Before other people can use it, the following needs to be done:
+This build works well on the author's Mac (M1 Pro). As of 2026-11-01 it has a menu-bar key picker,
+first-run setup, live recording feedback, and DMG packaging.
 
-- [ ] **Distribution signing.** The pipeline is ready: hardened runtime, the audio-input entitlement,
-  `--dmg` and `--notarize`. The full pipeline (Core ML, MLX Metal, cleanup) was verified under the
-  hardened runtime. What's missing is a Developer ID Application certificate, which requires the paid
-  Apple Developer Program. Apple Development signing only works on your own Macs.
-- [x] **Bundle ID and naming.** The app is now Bardic (`com.jesseboyes.bardic`). Override it with
-  `BUNDLE_ID` if you get your own domain. Logging follows the bundle automatically.
-- [ ] **Model licenses.** Check the license of each bundled or downloaded model before redistributing.
-  - Qwen 2.5 **3B** (the current default) is under the **Qwen Research License**: non-commercial use
-    only. Redistributing it requires shipping the license text and the notice "Qwen is licensed under
-    the Qwen RESEARCH LICENSE AGREEMENT, Copyright (c) Alibaba Cloud." The 1.5B and 7B models are
-    Apache-2.0.
-  - Eval (2026-11-01): 3B scores 10/10. 1.5B scores 8/10: it kept "basically", and wrote "gmail.com"
-    instead of "@gmail.com". It also turned "yo are you coming tonight" into "I'm coming tonight.",
-    which the fixtures don't catch. Add a fixture that preserves questions.
-  - Llama 3.2 uses Meta's community license.
-  - Whisper is MIT.
-  - Choose the default model accordingly.
-- [x] **Onboarding.** A first-run window covers permissions, the key choice, a try-it box and model
-  download progress.
-- [x] **Hotkey from the menu bar.** The push-to-talk key picker is in the dropdown.
-- [ ] **Updates.** For example, Sparkle.
-- [ ] **Hardware check.**
-  - Done: Macs with 8 GB or less default to the 1.5B cleanup model.
-  - The binary is arm64-only, so Intel Macs can't open it at all. The DMG page should say "Apple Silicon
-    only".
-  - Possibly: a friendlier message for very old macOS versions.
-- [ ] **Speed.** Whisper is now about 70% of latency. Options are streaming transcription while the key
-  is held, or a smaller or distilled model.
-- [ ] **Custom key combos.** For example ⌃⌥Space. This needs Carbon `RegisterEventHotKey` or a
+**Decisions made**
+- **Name:** Bardic (`com.jesseboyes.bardic`). Override it with `BUNDLE_ID` if you get your own domain.
+- **Speech model:** stay with Whisper large-v3 turbo. Parakeet (via FluidAudio) was considered and set
+  aside, because it would be extra complexity and an extra download.
+- **Cleanup model:** keep Qwen 2.5 3B. It scores 10/10 on the eval, against 8/10 for the Apache-2.0
+  1.5B model. Because of its license, the app stays free (see Credits).
+- **Signing:** unsigned for now, with no paid Apple Developer Program.
+
+**Sharing it today.** Run `scripts/build-app.sh --no-install --dmg` and send
+`build/Bardic-<version>.dmg`. The app isn't notarized, so recipients need to:
+1. Drag Bardic to Applications and open it. macOS will refuse the first time.
+2. Go to System Settings › Privacy & Security, scroll down, click **Open Anyway** next to Bardic, and
+   confirm.
+3. Follow the setup window: Microphone, Accessibility, then wait for the roughly 2.5 GB model download.
+
+They need an Apple Silicon Mac with macOS 14 or later. With each new version they repeat step 2, and
+may have to switch Accessibility off and on again.
+
+**To do**
+- [ ] **GitHub.** Decide between a private or public repo, and pick a license for the code (for example
+  MIT). A public repo's Releases page is an easy place to host the DMG.
+- [ ] **Install notes for recipients.** Put the steps above on the release page or in a text file
+  inside the DMG.
+- [ ] **Distribution signing (optional, $99/yr).** The pipeline is ready: hardened runtime, the
+  audio-input entitlement, `--dmg` and `--notarize`, and the full pipeline was verified under the
+  hardened runtime. With a Developer ID certificate, recipients wouldn't need "Open Anyway" and would
+  keep permissions across updates. `--notarize` has never been run.
+- [ ] **Updates.** Either a simple "new version available" check against GitHub Releases, or Sparkle.
+  Sparkle adds a dependency, and the build script doesn't copy `Contents/Frameworks` yet.
+- [ ] **Hardware.** Macs with 8 GB or less already default to the 1.5B cleanup model. The binary is
+  arm64-only, so Intel Macs can't open it; say "Apple Silicon only" wherever it's shared.
+- [ ] **Quality.**
+  - About 1 in 16 test dictations came back with no words, even though the audio wasn't silent. The
+    app now says so instead of failing quietly. Watch whether it recurs.
+  - A leading "So" without a comma can survive cleanup.
+  - Add an eval fixture checking that questions stay questions.
+  - Grow the fixtures with real usage.
+- [ ] **Custom key combos**, for example ⌃⌥Space. This needs Carbon `RegisterEventHotKey` or a
   `CGEventTap`, because NSEvent monitors can't swallow the key.
-- [ ] **Quality.** A leading "So" without a comma can survive cleanup. Grow the fixtures with real usage.
+- [ ] **Speed.** Whisper is about 70% of latency. Options are streaming transcription while the key is
+  held, or "Whisper Small, English" in Settings.
+- [x] Onboarding, menu-bar key picker, rename, live recording feedback, quiet-mic fix.
