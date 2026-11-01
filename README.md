@@ -218,7 +218,13 @@ This is a working personal build. Before other people can use it, the following 
   the default in `scripts/build-app.sh`) and update the docs. Logging follows the bundle automatically.
   Changing it resets permissions and settings for existing installs.
 - [ ] **Model licenses.** Check the license of each bundled or downloaded model before redistributing.
-  - Qwen 2.5 **3B** has its own Qwen license terms, which differ from the Apache-2.0 1.5B and 7B models.
+  - Qwen 2.5 **3B** (the current default) is under the **Qwen Research License**: non-commercial use
+    only. Redistributing it requires shipping the license text and the notice "Qwen is licensed under
+    the Qwen RESEARCH LICENSE AGREEMENT, Copyright (c) Alibaba Cloud." The 1.5B and 7B models are
+    Apache-2.0.
+  - Eval (2026-11-01): 3B scores 10/10. 1.5B scores 8/10: it kept "basically", and wrote "gmail.com"
+    instead of "@gmail.com". It also turned "yo are you coming tonight" into "I'm coming tonight.",
+    which the fixtures don't catch. Add a fixture that preserves questions.
   - Llama 3.2 uses Meta's community license.
   - Whisper is MIT.
   - Choose the default model accordingly.

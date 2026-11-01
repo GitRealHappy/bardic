@@ -47,6 +47,7 @@ struct OnboardingView: View {
     @State private var step = OnboardingStep.welcome
     @State private var tryText = ""
     @State private var axPrompted = false
+    @State private var tryStartedAt = Date()
     let close: () -> Void
 
     private var triggerKey: TriggerKey { TriggerKey(rawValue: triggerKeyRaw) ?? .rightOption }
@@ -173,6 +174,11 @@ struct OnboardingView: View {
                 .padding(6)
                 .background(.background, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary))
+            // Shown even if the paste lands, so the step visibly works in every case.
+            if let heard = state.history.first, heard.date > tryStartedAt {
+                Label("Heard: \(heard.text)", systemImage: "checkmark.bubble")
+                    .font(.callout).foregroundStyle(.green).lineLimit(2)
+            }
             modelStatus
             if !state.accessibilityGranted || !state.micGranted {
                 Label("Permissions are still missing, so the key won't work yet. Go back a step.",
@@ -222,7 +228,10 @@ struct OnboardingView: View {
     }
 
     private func move(_ delta: Int) {
-        if let next = OnboardingStep(rawValue: step.rawValue + delta) { step = next }
+        if let next = OnboardingStep(rawValue: step.rawValue + delta) {
+            step = next
+            if next == .tryIt { tryStartedAt = Date() }
+        }
     }
 
     // MARK: Pieces
