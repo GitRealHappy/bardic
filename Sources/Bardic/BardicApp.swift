@@ -46,8 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct MenuContent: View {
     @EnvironmentObject var state: AppState
+    @ObservedObject private var updates = UpdateChecker.shared
     @AppStorage("aiCleanup") private var aiCleanup = true
     @AppStorage("triggerKey") private var triggerKeyRaw = TriggerKey.rightOption.rawValue
+    @AppStorage("checkForUpdates") private var checkForUpdates = true
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -60,6 +62,30 @@ struct MenuContent: View {
 
             if !state.micGranted || !state.accessibilityGranted {
                 PermissionBanner()
+            }
+
+            if state.modelLoadFailed {
+                HStack {
+                    Text("The models didn't load.").font(.caption)
+                    Spacer()
+                    Button("Retry", action: state.retryModelLoad).controlSize(.small)
+                }
+            } else if state.cleanupUnavailable && aiCleanup {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                    Text("AI cleanup unavailable; pasting raw text").font(.caption)
+                    Spacer()
+                    Button("Retry", action: state.retryModelLoad).controlSize(.small)
+                }
+            }
+
+            if checkForUpdates, let update = updates.available {
+                Button { NSWorkspace.shared.open(update.url) } label: {
+                    Label("Bardic \(update.version) is available ›", systemImage: "arrow.down.app")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.tint)
             }
 
             Button(action: state.toggleFromMenu) {

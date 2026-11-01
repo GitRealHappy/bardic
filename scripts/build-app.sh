@@ -8,7 +8,7 @@
 #                "Developer ID Application" certificate and a notarytool keychain profile:
 #                  xcrun notarytool store-credentials bardic-notary --apple-id … --team-id …
 #
-# Environment overrides: SIGN_IDENTITY, BUNDLE_ID, VERSION, NOTARY_PROFILE.
+# Environment overrides: SIGN_IDENTITY, BUNDLE_ID, VERSION (default: the VERSION file), NOTARY_PROFILE.
 #
 # xcodebuild (not `swift build`) is required so MLX's Metal shaders get compiled into
 # mlx-swift_Cmlx.bundle/default.metallib.
@@ -20,7 +20,7 @@ cd "$ROOT"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 APP_NAME="Bardic"
 BUNDLE_ID="${BUNDLE_ID:-com.jesseboyes.bardic}"
-VERSION="${VERSION:-0.1.0}"
+VERSION="${VERSION:-$(<"$ROOT/VERSION")}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-bardic-notary}"
 ENTITLEMENTS="$ROOT/scripts/Bardic.entitlements"
 INSTALL_DIR="$HOME/Applications"
@@ -55,6 +55,30 @@ for b in "$PRODUCTS"/*.bundle(N); do
 done
 [[ -f "$APP/Contents/Resources/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib" || -f "$APP/Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib" ]] \
   || echo "⚠️  default.metallib not found in mlx-swift_Cmlx.bundle — the LLM will fail to run"
+cp "$ROOT/scripts/icon/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+
+# The app ships compiled copies of its Swift packages; their licenses require these notices to go with it.
+ACK="$APP/Contents/Resources/Acknowledgements.txt"
+{
+  echo "Bardic $VERSION"
+  echo
+  cat "$ROOT/LICENSE"
+  echo
+  echo "Cleanup model: Qwen 2.5 (Alibaba Cloud) is downloaded by the app from Hugging Face, not bundled."
+  echo "Qwen is licensed under the Qwen RESEARCH LICENSE AGREEMENT, Copyright (c) Alibaba Cloud. All Rights"
+  echo "Reserved. That license is non-commercial, so Bardic is free."
+  echo
+  echo "This app includes the following open-source packages."
+  for pkg in "$DERIVED"/SourcePackages/checkouts/*(/N); do
+    for f in "$pkg"/(LICENSE|NOTICE|NOTICES|COPYING)*(.N); do
+      echo
+      echo "================================================================================"
+      echo "${pkg:t}: ${f:t}"
+      echo "================================================================================"
+      cat "$f"
+    done
+  done
+} > "$ACK"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -65,6 +89,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>$APP_NAME</string>
   <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
   <key>CFBundleExecutable</key><string>Bardic</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>$(date +%Y%m%d%H%M)</string>
@@ -104,6 +129,7 @@ if (( MAKE_DMG )); then
   mkdir -p "$STAGE"
   cp -R "$APP" "$STAGE/"
   ln -s /Applications "$STAGE/Applications"
+  cp "$ROOT/scripts/dmg/Read Me First.txt" "$STAGE/"
   hdiutil create -quiet -volname "$APP_NAME" -srcfolder "$STAGE" -fs HFS+ -format UDZO "$DMG"
   rm -rf "$STAGE"
   if [[ "$IDENTITY" != "-" ]]; then

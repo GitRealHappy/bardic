@@ -196,7 +196,13 @@ struct OnboardingView: View {
                 Text(msg).font(.callout).foregroundStyle(.secondary).lineLimit(2)
             }
         case .error(let msg):
-            Label(msg, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.red)
+            HStack(alignment: .firstTextBaseline) {
+                Label(msg, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.red)
+                if state.modelLoadFailed {
+                    Spacer()
+                    Button("Retry", action: state.retryModelLoad)
+                }
+            }
         default:
             Label("Ready", systemImage: "checkmark.circle.fill").font(.callout).foregroundStyle(.green)
         }

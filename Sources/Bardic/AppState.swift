@@ -54,6 +54,10 @@ final class AppState: ObservableObject {
     /// Short message shown in the HUD while idle, e.g. when nothing was heard.
     @Published var notice: String?
     @Published var history: [HistoryItem] = []
+    /// The speech model couldn't be downloaded or loaded; the UI offers Retry.
+    @Published var modelLoadFailed = false
+    /// The cleanup model failed to load. Dictation still works, pasting the raw transcript.
+    @Published var cleanupUnavailable = false
     @Published var micGranted = Permissions.microphoneGranted
     @Published var accessibilityGranted = Permissions.accessibilityGranted
 
@@ -150,6 +154,7 @@ final class AppState: ObservableObject {
             onboarding.show()
         }
         Task { await loadModels() }
+        UpdateChecker.shared.start()
     }
 
     /// The 3B cleanup model needs ~1.8 GB of RAM on top of Whisper; on 8 GB Macs that competes with
@@ -163,20 +168,69 @@ final class AppState: ObservableObject {
         }
     }
 
+    var speechModel: SpeechModel { SpeechModel(rawValue: speechModelRaw) ?? .largeV3Turbo }
+    var cleanupModel: CleanupModel { CleanupModel(rawValue: cleanupModelRaw) ?? .qwen25_3B }
+
     func loadModels() async {
-        let speech = SpeechModel(rawValue: speechModelRaw) ?? .largeV3Turbo
-        let llm = CleanupModel(rawValue: cleanupModelRaw) ?? .qwen25_3B
-        let report: @Sendable (String) -> Void = { msg in Task { @MainActor in AppState.shared.phase = .loading(msg) } }
-        do {
-            phase = .loading("Loading speech model…")
-            try await transcriber.load(speech, progress: report)
-            if aiCleanup {
-                try await cleaner.load(llm, progress: report)
+        let speech = speechModel
+        let llm = cleanupModel
+        modelLoadFailed = false
+        cleanupUnavailable = false
+        let report: @Sendable (String) -> Void = { msg in
+            Task { @MainActor in
+                // A late progress message mustn't overwrite the outcome once loading has finished.
+                if case .loading = AppState.shared.phase { AppState.shared.phase = .loading(msg) }
             }
-            phase = .idle
-        } catch {
-            phase = .error("Model load failed: \(error.localizedDescription)")
         }
+        phase = .loading("Loading speech model…")
+
+        // Check for room before starting a multi-gigabyte download that would fail partway.
+        var needed: Int64 = Transcriber.isDownloaded(speech) ? 0 : speech.approxBytes
+        if aiCleanup && !Cleaner.isDownloaded(llm) { needed += llm.approxBytes }
+        if needed > 0, let free = Paths.freeDiskBytes, free < needed + 1_000_000_000 {
+            let gb = { (b: Int64) in String(format: "%.1f GB", Double(b) / 1_000_000_000) }
+            AppState.log.error("not enough disk: need \(needed), free \(free)")
+            modelLoadFailed = true
+            phase = .error("Bardic needs about \(gb(needed + 1_000_000_000)) free to download its models; this Mac has \(gb(free)).")
+            return
+        }
+
+        do {
+            try await transcriber.load(speech, progress: report)
+        } catch {
+            AppState.log.error("speech model load failed: \(String(describing: error), privacy: .public)")
+            modelLoadFailed = true
+            phase = .error(Self.friendlyLoadError(error, what: "speech model"))
+            return
+        }
+
+        if aiCleanup {
+            phase = .loading("Loading language model…")
+            do {
+                try await cleaner.load(llm, progress: report)
+            } catch {
+                // Dictation still works without cleanup: it pastes Whisper's text as-is.
+                AppState.log.error("cleanup model load failed: \(String(describing: error), privacy: .public)")
+                cleanupUnavailable = true
+            }
+        }
+        phase = .idle
+    }
+
+    func retryModelLoad() {
+        Task { await loadModels() }
+    }
+
+    private static func friendlyLoadError(_ error: Error, what: String) -> String {
+        if let url = error as? URLError {
+            switch url.code {
+            case .notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotFindHost,
+                 .cannotConnectToHost, .dnsLookupFailed, .dataNotAllowed, .internationalRoamingOff:
+                return "Couldn't download the models. Check your internet connection, then press Retry."
+            default: break
+            }
+        }
+        return "The \(what) didn't load: \(error.localizedDescription)"
     }
 
     /// Accessibility is granted in System Settings while we run; poll so the UI updates and

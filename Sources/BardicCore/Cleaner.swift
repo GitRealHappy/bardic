@@ -25,6 +25,13 @@ public actor Cleaner {
 
     public var isLoaded: Bool { container != nil }
 
+    /// True when the model's config and weights are on disk.
+    public static func isDownloaded(_ model: CleanupModel) -> Bool {
+        let folder = Paths.cleanupModel(model)
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        return files.contains("config.json") && files.contains { $0.hasSuffix(".safetensors") }
+    }
+
     public func load(_ model: CleanupModel, progress: (@Sendable (String) -> Void)? = nil) async throws {
         if loadedModel == model, container != nil { return }
         container = nil
@@ -33,11 +40,21 @@ public actor Cleaner {
         Memory.cacheLimit = 32 * 1024 * 1024
 
         progress?("Loading language model…")
+        let wasDownloaded = Self.isDownloaded(model)
         let configuration = LLMModelFactory.shared.configuration(id: model.rawValue)
-        container = try await LLMModelFactory.shared.loadContainer(configuration: configuration) { p in
-            if p.fractionCompleted < 1 {
-                progress?("Downloading language model… \(Int(p.fractionCompleted * 100))%")
+        do {
+            container = try await LLMModelFactory.shared.loadContainer(configuration: configuration) { p in
+                if p.fractionCompleted < 1 {
+                    progress?("Downloading language model… \(Int(p.fractionCompleted * 100))%")
+                }
             }
+        } catch {
+            // A complete-looking model that won't load is damaged; remove it so Retry fetches a fresh
+            // copy. A partial download is kept, because the next attempt resumes it.
+            if wasDownloaded, !(error is URLError) {
+                try? FileManager.default.removeItem(at: Paths.cleanupModel(model))
+            }
+            throw error
         }
         loadedModel = model
         try await buildPrefixCache()

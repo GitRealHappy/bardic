@@ -10,6 +10,7 @@ struct SettingsView: View {
             ModelsTab().tabItem { Label("Models", systemImage: "cpu") }
             DictionaryTab().tabItem { Label("Dictionary", systemImage: "character.book.closed") }
             HistoryTab().tabItem { Label("History", systemImage: "clock") }
+            AboutTab().tabItem { Label("About", systemImage: "info.circle") }
         }
         .padding(20)
         .frame(width: 560, height: 440)
@@ -23,6 +24,7 @@ private struct GeneralTab: View {
     @AppStorage("contextAware") private var contextAware = true
     @AppStorage("addTrailingSpace") private var addTrailingSpace = true
     @AppStorage("language") private var language = "en"
+    @AppStorage("checkForUpdates") private var checkForUpdates = true
 
     var body: some View {
         Form {
@@ -43,6 +45,7 @@ private struct GeneralTab: View {
                 Text("German").tag("de")
             }
             Toggle("Launch at login", isOn: Binding(get: { state.launchAtLogin }, set: { state.launchAtLogin = $0 }))
+            Toggle("Check for updates (asks GitHub at launch and once a day)", isOn: $checkForUpdates)
 
             Section("Permissions") {
                 LabeledContent("Microphone") {
@@ -99,6 +102,65 @@ private struct DictionaryTab: View {
                 .font(.body.monospaced())
                 .border(.quaternary)
         }
+    }
+}
+
+private struct AboutTab: View {
+    @EnvironmentObject var state: AppState
+    @ObservedObject private var updates = UpdateChecker.shared
+    @State private var copied = false
+    @State private var checking = false
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable().frame(width: 96, height: 96)
+            VStack(spacing: 4) {
+                Text("Bardic").font(.title.bold())
+                Text("Version \(UpdateChecker.currentVersion) (build \(Diagnostics.buildNumber))")
+                    .foregroundStyle(.secondary)
+                Text("Local, private voice dictation. Free and open source (MIT).")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+
+            HStack {
+                if let update = updates.available {
+                    Button("Download \(update.version)") { NSWorkspace.shared.open(update.url) }
+                } else {
+                    Button(checking ? "Checking…" : "Check for updates") {
+                        checking = true
+                        Task { await updates.check(); checking = false }
+                    }
+                    .disabled(checking)
+                }
+                if let result = updates.lastResult {
+                    Text(result).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            HStack(spacing: 16) {
+                Link("GitHub page", destination: UpdateChecker.pageURL)
+                Button("Acknowledgements") {
+                    if let url = Bundle.main.url(forResource: "Acknowledgements", withExtension: "txt") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(.link)
+            }
+
+            Divider().padding(.vertical, 4)
+
+            VStack(spacing: 6) {
+                Button(copied ? "Copied" : "Copy debug info") {
+                    Diagnostics.copyReport(state)
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
+                }
+                Text("Versions, Mac model, model status and recent log lines, for a bug report. No dictated text is included.")
+                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

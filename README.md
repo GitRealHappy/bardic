@@ -1,9 +1,21 @@
+<img src="scripts/icon/icon-512.png" width="128" alt="Bardic icon">
+
 # Bardic
 
 Local, private AI voice dictation for macOS. Hold a key, talk, and polished text appears wherever your
 cursor is. Fillers are removed, self-corrections are applied ("Tuesday, no wait, Wednesday" becomes
 "Wednesday"), and punctuation, lists, emails and times are formatted. Everything runs on your Mac: no
-account, no cloud, and it works offline after the first model download.
+account, no cloud, and it works offline after the first model download. The only other thing it
+contacts is GitHub, to check for new versions; you can switch that off.
+
+## Download
+
+Get the latest `Bardic-<version>.dmg` from the
+[Releases page](https://github.com/GitRealHappy/bardic/releases/latest).
+- **Apple Silicon only** (M1 or later), macOS 14 or later.
+- Bardic isn't notarized by Apple, so the first launch needs one extra step. Open it once, then go to
+  System Settings › Privacy & Security and click **Open Anyway**.
+- The "Read Me First" file in the disk image has the full steps.
 
 ```
 hold ⌥ (right) ─► mic (AVAudioEngine, 16 kHz mono)
@@ -32,18 +44,48 @@ scripts/build-app.sh --no-install --notarize  # DMG + Apple notarization (needs 
 
 The script does the following:
 1. Builds with `xcodebuild`.
-2. Assembles the `.app`, including the resource bundles. `mlx-swift_Cmlx.bundle` contains the Metal
-   shader library.
-3. Writes `Info.plist`.
+2. Assembles the `.app`. This includes:
+   - the resource bundles (`mlx-swift_Cmlx.bundle` contains the Metal shader library)
+   - the icon
+   - `Acknowledgements.txt`, built from the license and notice files of every Swift package
+3. Writes `Info.plist`. The version comes from the `VERSION` file.
 4. Signs the app with the hardened runtime and `scripts/Bardic.entitlements` (microphone access).
    It uses a "Developer ID Application" identity if your keychain has one, otherwise the first "Apple
    Development" identity, otherwise ad-hoc. Override this with `SIGN_IDENTITY="…"`. `BUNDLE_ID` and
    `VERSION` can be overridden the same way.
 5. Installs the app to `~/Applications`.
-6. With `--dmg`, packages the app as a drag-to-Applications disk image. With `--notarize`, it also submits
+6. With `--dmg`, packages the app as a drag-to-Applications disk image, together with
+   `scripts/dmg/Read Me First.txt`. With `--notarize`, it also submits
    the DMG to Apple with `notarytool` and staples the ticket. Notarization needs a Developer ID
    certificate and a stored keychain profile; create the profile once with
    `xcrun notarytool store-credentials bardic-notary --apple-id <email> --team-id <team>`.
+
+### Releasing
+
+1. Add a `## <version>` section to `CHANGELOG.md` and commit it.
+2. Run `scripts/release.sh <version> --dry-run`. This builds the DMG and shows the release notes, but
+   publishes nothing.
+3. Run `scripts/release.sh <version>` to publish. It:
+   - refuses to run on a dirty tree, outside `main`, or with only ad-hoc signing
+   - runs the cleanup eval and stops on any failure (`--skip-eval` skips this)
+   - writes `VERSION` and builds and signs the DMG
+   - commits, tags `v<version>`, pushes, and creates the GitHub release with the DMG and its SHA-256
+
+Every release must be signed with the same certificate, or users lose their Accessibility grant when
+they update.
+
+The app's update check (`UpdateChecker`) asks
+`api.github.com/repos/GitRealHappy/bardic/releases/latest` 30 s after launch and once a day after that.
+It sends nothing beyond a standard HTTPS request. If the tag is newer than the running version, the
+menu shows a link to the release.
+
+### App icon
+
+The icon art is `scripts/icon/icon-source.png`. `swift scripts/make-icon.swift` crops it, makes the
+corners transparent, places it on the macOS icon grid, and writes `scripts/icon/AppIcon.icns` and
+`icon-512.png`. Both outputs are committed.
+
+### Permissions across rebuilds
 
 macOS permissions (TCC) are kept across rebuilds only while the bundle ID (`com.jesseboyes.bardic`),
 signing identity and install path stay the same. With ad-hoc signing, you must re-grant permissions
@@ -60,6 +102,11 @@ dropdown. If both permissions are already granted, for example after an upgrade,
 3. Pick the dictation key and try it out in the setup window.
 4. Wait for the models. The setup window and the menu bar icon show progress.
    - The first run downloads about 630 MB of Whisper and about 1.8 GB of Qwen from Hugging Face.
+     Free disk space is checked first.
+   - If a download fails, for example when the network drops, the menu and the setup window offer
+     **Retry**. A partly downloaded or damaged Whisper model is detected and downloaded again.
+   - If only the cleanup model fails, dictation still works and pastes the raw transcript. The menu
+     says "AI cleanup unavailable".
    - Core ML then compiles Whisper for the Neural Engine. This happens once and can take several
      minutes.
    - Later launches load from disk in about 15 s and need no network.
@@ -76,6 +123,7 @@ dropdown. If both permissions are already granted, for example after an upgrade,
 | Change the dictation key | Menu bar icon › Push-to-talk key, or Settings › General |
 | Change models, language | Menu bar icon › Settings |
 | Setup guide | Menu bar icon › **?** |
+| Version, updates, bug report info | Settings › About (**Copy debug info**) |
 | Names & jargon | Settings › Dictionary. This biases both Whisper and the LLM. |
 
 **While you're recording**, the pill at the bottom of the screen shows:
@@ -169,10 +217,15 @@ You can make a quick spoken test file with
   - `HUD`: the floating pill, with the timer, level bars, "can't hear you" warning and notices.
   - `Onboarding`: the first-run setup window.
   - `BardicApp`: the menu.
-  - `SettingsView`
+  - `SettingsView`: includes the About tab.
+  - `UpdateChecker`: the daily GitHub Releases check.
+  - `Diagnostics`: the "Copy debug info" report.
   - `Permissions`
 - **`Sources/BardicCLI`** is the test harness and fixtures.
 - **`scripts/build-app.sh`** builds, bundles, signs and installs.
+- **`scripts/release.sh`** publishes a GitHub release.
+- **`scripts/make-icon.swift`** generates the app icon.
+- **`VERSION`** holds the version number. **`CHANGELOG.md`** feeds the release notes.
 
 ## Where data lives
 
@@ -250,6 +303,9 @@ harmless in the Swift 5 language mode the package uses.
 
 ## Credits and licenses
 
+Bardic's code is MIT-licensed; see `LICENSE`. The app bundle includes `Acknowledgements.txt`, which holds
+the license and notice of every bundled package. Open it from Settings › About.
+
 - [Whisper](https://github.com/openai/whisper) (OpenAI), MIT. It runs through
   [WhisperKit](https://github.com/argmaxinc/WhisperKit) (Argmax), which is also MIT.
 - [MLX Swift](https://github.com/ml-explore/mlx-swift) and mlx-swift-lm (Apple), MIT.
@@ -260,8 +316,9 @@ harmless in the Swift 5 language mode the package uses.
 
 ## Status and road to sharing
 
-This build works well on the author's Mac (M1 Pro). As of 2026-11-01 it has a menu-bar key picker,
-first-run setup, live recording feedback, and DMG packaging.
+This build works well on the author's Mac (M1 Pro). Version 0.2.0 is the first public release. It
+adds an icon, an About tab with debug info, an update check, and a sturdier first run. It also adds a
+release script.
 
 **Decisions made**
 - **Name:** Bardic (`com.jesseboyes.bardic`). Override it with `BUNDLE_ID` if you get your own domain.
@@ -269,29 +326,25 @@ first-run setup, live recording feedback, and DMG packaging.
   aside, because it would be extra complexity and an extra download.
 - **Cleanup model:** keep Qwen 2.5 3B. It scores 10/10 on the eval, against 8/10 for the Apache-2.0
   1.5B model. Because of its license, the app stays free (see Credits).
-- **Signing:** unsigned for now, with no paid Apple Developer Program.
+- **Signing:** not notarized, with no paid Apple Developer Program. Releases are signed with the
+  author's Apple Development certificate. Users click "Open Anyway" once per version. A stable
+  signature should keep their permissions across updates, but that hasn't been tested on another Mac
+  yet.
+- **Code:** public at [GitRealHappy/bardic](https://github.com/GitRealHappy/bardic), MIT license.
 
-**Sharing it today.** Run `scripts/build-app.sh --no-install --dmg` and send
-`build/Bardic-<version>.dmg`. The app isn't notarized, so recipients need to:
-1. Drag Bardic to Applications and open it. macOS will refuse the first time.
-2. Go to System Settings › Privacy & Security, scroll down, click **Open Anyway** next to Bardic, and
-   confirm.
-3. Follow the setup window: Microphone, Accessibility, then wait for the roughly 2.5 GB model download.
-
-They need an Apple Silicon Mac with macOS 14 or later. With each new version they repeat step 2, and
-may have to switch Accessibility off and on again.
+**Sharing it.** Publish with `scripts/release.sh` (see Releasing) and send people the Releases link.
+The install steps are on the release page and in the DMG.
 
 **To do**
-- [ ] **GitHub.** Decide between a private or public repo, and pick a license for the code (for example
-  MIT). A public repo's Releases page is an easy place to host the DMG.
-- [ ] **Install notes for recipients.** Put the steps above on the release page or in a text file
-  inside the DMG.
+- [x] **GitHub:** a public repo under the MIT license, with DMGs on the Releases page.
+- [x] **Install notes:** "Read Me First" in the DMG, and the same steps on each release page.
+- [x] **Updates:** the menu shows a notice with a link. Installing is still manual.
 - [ ] **Distribution signing (optional, $99/yr).** The pipeline is ready: hardened runtime, the
   audio-input entitlement, `--dmg` and `--notarize`, and the full pipeline was verified under the
   hardened runtime. With a Developer ID certificate, recipients wouldn't need "Open Anyway" and would
   keep permissions across updates. `--notarize` has never been run.
-- [ ] **Updates.** Either a simple "new version available" check against GitHub Releases, or Sparkle.
-  Sparkle adds a dependency, and the build script doesn't copy `Contents/Frameworks` yet.
+- [ ] **In-app updating** (optional): Sparkle. It adds a dependency, and the build script doesn't copy
+  `Contents/Frameworks` yet.
 - [ ] **Hardware.** Macs with 8 GB or less already default to the 1.5B cleanup model. The binary is
   arm64-only, so Intel Macs can't open it; say "Apple Silicon only" wherever it's shared.
 - [ ] **Quality.**
@@ -306,3 +359,5 @@ may have to switch Accessibility off and on again.
   held, or "Whisper Small, English" in Settings.
 - [x] Onboarding, menu-bar key picker, rename, live recording feedback, quiet-mic fix, hands-free
   exits (key, Esc, pill buttons), and a menu bar that stays clickable while recording.
+- [x] 0.2.0: icon, About tab with debug info, download progress and Retry, disk check, and recovery
+  from damaged downloads.

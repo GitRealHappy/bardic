@@ -15,6 +15,15 @@ public enum SpeechModel: String, CaseIterable, Identifiable, Sendable {
         case .baseEnglish: return "Whisper Base, English (fastest, ~150 MB)"
         }
     }
+
+    /// Approximate download size, for the free-space check.
+    public var approxBytes: Int64 {
+        switch self {
+        case .largeV3Turbo: return 630_000_000
+        case .smallEnglish: return 220_000_000
+        case .baseEnglish: return 150_000_000
+        }
+    }
 }
 
 /// Local LLM choices for the cleanup pass (MLX 4-bit models from `mlx-community`).
@@ -32,6 +41,15 @@ public enum CleanupModel: String, CaseIterable, Identifiable, Sendable {
         case .qwen25_1_5B: return "Qwen 2.5 1.5B (fastest, ~0.9 GB)"
         case .llama32_3B: return "Llama 3.2 3B (~1.8 GB)"
         case .qwen25_7B: return "Qwen 2.5 7B (best quality, ~4.3 GB, slower)"
+        }
+    }
+
+    /// Approximate download size, for the free-space check.
+    public var approxBytes: Int64 {
+        switch self {
+        case .qwen25_3B, .llama32_3B: return 1_800_000_000
+        case .qwen25_1_5B: return 900_000_000
+        case .qwen25_7B: return 4_300_000_000
         }
     }
 }
@@ -55,5 +73,18 @@ public enum Paths {
         let dir = appSupport.appendingPathComponent("SpeechModels", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    /// Where mlx-swift-lm's Hugging Face client keeps a cleanup model: ~/Library/Caches/models/<repo id>.
+    public static func cleanupModel(_ model: CleanupModel) -> URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("models/\(model.rawValue)", isDirectory: true)
+    }
+
+    /// Free space on the home volume that macOS will make available for important downloads.
+    public static var freeDiskBytes: Int64? {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let values = try? home.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return values?.volumeAvailableCapacityForImportantUsage
     }
 }

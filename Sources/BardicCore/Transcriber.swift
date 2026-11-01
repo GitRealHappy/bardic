@@ -10,33 +10,66 @@ public actor Transcriber {
 
     public var isLoaded: Bool { whisper != nil }
 
+    /// Where WhisperKit keeps a downloaded model.
+    static func folder(for model: SpeechModel) -> URL {
+        Paths.speechModels.appendingPathComponent("models/argmaxinc/whisperkit-coreml/\(model.rawValue)")
+    }
+
+    /// True when every part of the model is on disk. An interrupted download can leave some of them
+    /// missing, which a check for a single file wouldn't notice.
+    public static func isDownloaded(_ model: SpeechModel) -> Bool {
+        let folder = folder(for: model)
+        return ["AudioEncoder.mlmodelc", "TextDecoder.mlmodelc", "MelSpectrogram.mlmodelc", "config.json"]
+            .allSatisfy { FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path) }
+    }
+
     /// Downloads (first run only) and loads the model. Later launches load from disk and work offline.
     public func load(_ model: SpeechModel, progress: (@Sendable (String) -> Void)? = nil) async throws {
         if loadedModel == model, whisper != nil { return }
         whisper = nil
+        loadedModel = nil
 
-        // Already downloaded? Load straight from disk so no network is needed.
-        let localFolder = Paths.speechModels
-            .appendingPathComponent("models/argmaxinc/whisperkit-coreml/\(model.rawValue)")
-        let isDownloaded = FileManager.default.fileExists(
-            atPath: localFolder.appendingPathComponent("AudioEncoder.mlmodelc").path)
-
-        var config: WhisperKitConfig
-        if isDownloaded {
-            progress?("Loading speech model (first launch compiles for the Neural Engine, can take a few minutes)…")
-            config = WhisperKitConfig(modelFolder: localFolder.path, tokenizerFolder: Paths.speechModels,
-                                      verbose: false, logLevel: .error,
-                                      prewarm: true, load: true, download: false)
-        } else {
-            progress?("Downloading speech model (first run)…")
-            config = WhisperKitConfig(model: model.rawValue, downloadBase: Paths.speechModels,
-                                      tokenizerFolder: Paths.speechModels,
-                                      verbose: false, logLevel: .error,
-                                      prewarm: true, load: true, download: true)
+        var folder = Self.folder(for: model)
+        var freshDownload = false
+        if !Self.isDownloaded(model) {
+            folder = try await download(model, progress: progress)
+            freshDownload = true
         }
 
-        whisper = try await WhisperKit(config)
+        do {
+            whisper = try await Self.loadFromDisk(folder, progress: progress)
+        } catch where !freshDownload {
+            // A model that's on disk but won't load is most likely damaged: fetch it again, once.
+            try? FileManager.default.removeItem(at: folder)
+            folder = try await download(model, progress: progress)
+            whisper = try await Self.loadFromDisk(folder, progress: progress)
+        }
         loadedModel = model
+    }
+
+    private func download(_ model: SpeechModel, progress: (@Sendable (String) -> Void)?) async throws -> URL {
+        progress?("Downloading speech model…")
+        let lastPercent = Counter()
+        do {
+            return try await WhisperKit.download(variant: model.rawValue, downloadBase: Paths.speechModels) { p in
+                let percent = Int(p.fractionCompleted * 100)
+                if lastPercent.exchange(percent) != percent, percent < 100 {
+                    progress?("Downloading speech model… \(percent)%")
+                }
+            }
+        } catch {
+            // Don't leave a half-finished model behind for the next launch to trip over.
+            try? FileManager.default.removeItem(at: Self.folder(for: model))
+            throw error
+        }
+    }
+
+    private static func loadFromDisk(_ folder: URL, progress: (@Sendable (String) -> Void)?) async throws -> WhisperKit {
+        progress?("Loading speech model (first launch compiles for the Neural Engine, can take a few minutes)…")
+        let config = WhisperKitConfig(modelFolder: folder.path, tokenizerFolder: Paths.speechModels,
+                                      verbose: false, logLevel: .error,
+                                      prewarm: true, load: true, download: false)
+        return try await WhisperKit(config)
     }
 
     /// Transcribes 16 kHz mono samples. `vocabulary` biases recognition toward names/jargon.
@@ -75,5 +108,19 @@ public actor Transcriber {
     public enum TranscriberError: LocalizedError {
         case notLoaded
         public var errorDescription: String? { "Speech model is not loaded yet." }
+    }
+}
+
+/// Remembers the last progress percentage across download callbacks, which can arrive on any thread.
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = -1
+
+    /// Stores `new` and returns the previous value.
+    func exchange(_ new: Int) -> Int {
+        lock.lock(); defer { lock.unlock() }
+        let old = value
+        value = new
+        return old
     }
 }
