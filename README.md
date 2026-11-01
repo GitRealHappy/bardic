@@ -69,9 +69,9 @@ dropdown. If both permissions are already granted, for example after an upgrade,
 | Action | How |
 |---|---|
 | Dictate | Hold **Right Option**, speak, release |
-| Hands-free | Double-tap Right Option, speak, tap once more to finish |
+| Hands-free | Double-tap Right Option, speak, then tap once more, or click ✓ on the pill, to finish |
 | Cancel | **Esc**, or press any other key while holding (it was a shortcut) |
-| Start/stop without the key | Menu bar icon › Start dictation |
+| Start/stop without the key | Menu bar icon › Start dictation. Finish with a key tap, ✓ on the pill, or Esc to cancel |
 | Re-copy a past dictation | Menu bar icon › Recent (click to copy), or Settings › History |
 | Change the dictation key | Menu bar icon › Push-to-talk key, or Settings › General |
 | Change models, language | Menu bar icon › Settings |
@@ -82,6 +82,10 @@ dropdown. If both permissions are already granted, for example after an upgrade,
 - a running timer
 - level bars that follow your voice
 - an orange **"Can't hear you"** if no voice has been picked up for 2.5 s
+- in hands-free mode, **✓ Done** and **✕ Cancel** buttons. Clicking them doesn't take focus away from
+  the text box.
+
+The text is pasted into the app that's in front when you finish, not the one where you started.
 
 If a recording turns out to be silent, or Whisper finds no words, the pill says **"Didn't catch that"**
 instead of disappearing. Raising the input level under System Settings › Sound › Input helps quiet
@@ -193,6 +197,12 @@ You can make a quick spoken test file with
   -58 dBFS is treated as silence. To keep the last 20 recordings for inspection, run
   `defaults write com.jesseboyes.bardic debugSaveAudio -bool YES`. They're saved in
   `~/Library/Application Support/Bardic/DebugAudio`.
+- **The Bardic icon disappears while recording (MacBooks with a notch):** macOS adds its own
+  microphone icon while the mic is in use. If the right side of the menu bar is full, the leftmost icons
+  get hidden behind the notch, and Bardic is often leftmost because it was launched most recently. To
+  fix this, hold ⌘ and drag Bardic's icon toward the clock, or switch off unneeded icons in System
+  Settings › Menu Bar. While recording you don't need the icon: tap the key, use the pill's buttons, or
+  press Esc.
 - **The orange mic dot flashes when I use Option shortcuts:** this is expected. Pressing the trigger key
   starts the mic, and a quick tap cancels it.
 - **Changed models or turned AI cleanup on, but nothing happened:** press Settings › Models ›
@@ -294,4 +304,5 @@ may have to switch Accessibility off and on again.
   `CGEventTap`, because NSEvent monitors can't swallow the key.
 - [ ] **Speed.** Whisper is about 70% of latency. Options are streaming transcription while the key is
   held, or "Whisper Small, English" in Settings.
-- [x] Onboarding, menu-bar key picker, rename, live recording feedback, quiet-mic fix.
+- [x] Onboarding, menu-bar key picker, rename, live recording feedback, quiet-mic fix, hands-free
+  exits (key, Esc, pill buttons), and a menu bar that stays clickable while recording.
