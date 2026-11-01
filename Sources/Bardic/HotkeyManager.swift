@@ -79,6 +79,7 @@ final class HotkeyManager {
 
     func start() {
         stop()
+        armedTrigger = trigger
         let flags: (NSEvent) -> Void = { [weak self] e in MainActor.assumeIsolated { self?.flagsChanged(e) } }
         let keys: (NSEvent) -> Void = { [weak self] e in MainActor.assumeIsolated { self?.keyDown(e) } }
         if let m = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged, handler: flags) { monitors.append(m) }
@@ -90,6 +91,14 @@ final class HotkeyManager {
     func stop() {
         monitors.forEach { NSEvent.removeMonitor($0) }
         monitors.removeAll()
+    }
+
+    /// Recording was started from the menu in hands-free mode: arm the same exits as a double-tap
+    /// (tap the key to finish, Esc to cancel).
+    func beginHandsFree() {
+        armedTrigger = trigger  // so the first key event isn't mistaken for a key change
+        active = true
+        handsFree = true
     }
 
     /// Called by the app when recording ends for another reason (e.g. menu button).

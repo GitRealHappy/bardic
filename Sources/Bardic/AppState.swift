@@ -57,6 +57,10 @@ final class AppState: ObservableObject {
     lazy var onboarding = OnboardingController(state: self)
 
     private var targetApp: NSRunningApplication?
+    /// The most recent app in front other than Bardic, so text started or stopped from Bardic's
+    /// own menu still goes to the app the user is working in.
+    private var lastExternalApp: NSRunningApplication?
+    private var activationObserver: NSObjectProtocol?
     private(set) var recordStart = Date()
     /// Last time the mic picked up something louder than room noise. Not @Published: the HUD
     /// polls it on a timer rather than redrawing for every audio chunk.
@@ -113,6 +117,15 @@ final class AppState: ObservableObject {
         hotkeys.onEvent = { [weak self] e in self?.handle(e) }
         hotkeys.start()
         watchPermissions()
+        lastExternalApp = Self.externalFrontmostApp
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            MainActor.assumeIsolated {
+                if let app, app != NSRunningApplication.current { AppState.shared.lastExternalApp = app }
+            }
+        }
 
         // People who already granted both permissions (e.g. upgrading from an earlier build) have
         // effectively been through setup.
@@ -188,11 +201,29 @@ final class AppState: ObservableObject {
 
     func toggleFromMenu() {
         if case .recording = phase {
-            hotkeys.reset()
-            Task { await stopAndProcess() }
+            finishFromUI()
         } else {
             startRecording(handsFree: true)
+            // Let a tap of the dictation key (or Esc) end it, same as hotkey hands-free mode.
+            if case .recording = phase { hotkeys.beginHandsFree() }
         }
+    }
+
+    /// Finish button in the HUD, or Stop in the menu.
+    func finishFromUI() {
+        hotkeys.reset()
+        Task { await stopAndProcess() }
+    }
+
+    /// Cancel button in the HUD.
+    func cancelFromUI() {
+        hotkeys.reset()
+        cancelRecording()
+    }
+
+    private static var externalFrontmostApp: NSRunningApplication? {
+        let front = NSWorkspace.shared.frontmostApplication
+        return front == NSRunningApplication.current ? nil : front
     }
 
     func startRecording(handsFree: Bool) {
@@ -207,7 +238,7 @@ final class AppState: ObservableObject {
             hud.show()
             return
         }
-        targetApp = NSWorkspace.shared.frontmostApplication
+        targetApp = Self.externalFrontmostApp ?? lastExternalApp
         notice = nil
         do {
             try recorder.start()
@@ -254,6 +285,8 @@ final class AppState: ObservableObject {
             return
         }
 
+        // Paste where the user is now: in hands-free mode they may have clicked into another app.
+        if let front = Self.externalFrontmostApp { targetApp = front } else if targetApp == nil { targetApp = lastExternalApp }
         phase = .processing
         let appName = targetApp?.localizedName
         let style: DictationStyle = contextAware ? .forBundleID(targetApp?.bundleIdentifier) : .standard

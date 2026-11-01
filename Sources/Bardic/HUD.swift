@@ -17,9 +17,10 @@ final class HUDController {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        panel.ignoresMouseEvents = true
+        // Clickable for the Finish/Cancel buttons; the transparent area around the pill passes
+        // clicks through, and the panel never takes focus from the app being dictated into.
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        panel.contentView = NSHostingView(rootView: HUDView().environmentObject(state))
+        panel.contentView = FirstClickHostingView(rootView: HUDView().environmentObject(state))
     }
 
     func show() {
@@ -44,6 +45,11 @@ final class HUDController {
             self?.panel.orderOut(nil)
         }
     }
+}
+
+/// Buttons in a panel that never becomes key would otherwise swallow the first click.
+private final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 struct HUDView: View {
@@ -102,8 +108,21 @@ private struct RecordingStatus: View {
                 if quiet {
                     Label("Can't hear you", systemImage: "mic.slash")
                         .font(.caption).foregroundStyle(.orange)
-                } else if handsFree {
-                    Text("tap to finish").font(.caption).foregroundStyle(.secondary)
+                }
+                if handsFree {
+                    // Always a visible way out of hands-free mode, whatever started it.
+                    Button(action: state.finishFromUI) {
+                        Label("Done", systemImage: "checkmark.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.green)
+                    .help("Stop and insert the text (or tap \(state.triggerKey.shortName))")
+                    Button(action: state.cancelFromUI) {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("Cancel (Esc)")
                 }
             }
         }
