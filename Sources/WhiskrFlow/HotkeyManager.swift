@@ -15,13 +15,21 @@ enum TriggerKey: String, CaseIterable, Identifiable {
         }
     }
 
-    var flag: NSEvent.ModifierFlags {
+    /// Device-dependent bit for this physical key (NX_DEVICER*KEYMASK in IOKit's IOLLEvent.h).
+    /// The generic `.option`/`.command` flags stay set while the *left* key is held, which would
+    /// hide the release of the right one and leave recording stuck on. Fn has a single key.
+    private var deviceMask: UInt? {
         switch self {
-        case .rightOption: return .option
-        case .rightCommand: return .command
-        case .rightControl: return .control
-        case .fn: return .function
+        case .rightOption: return 0x40
+        case .rightCommand: return 0x10
+        case .rightControl: return 0x2000
+        case .fn: return nil
         }
+    }
+
+    func isPressed(in flags: NSEvent.ModifierFlags) -> Bool {
+        if let deviceMask { return flags.rawValue & deviceMask != 0 }
+        return flags.contains(.function)
     }
 
     var displayName: String {
@@ -32,6 +40,18 @@ enum TriggerKey: String, CaseIterable, Identifiable {
         case .fn: return "Fn / Globe 🌐"
         }
     }
+
+    /// Short form for tight spaces like the menu bar dropdown.
+    var shortName: String {
+        switch self {
+        case .rightOption: return "Right ⌥"
+        case .rightCommand: return "Right ⌘"
+        case .rightControl: return "Right ⌃"
+        case .fn: return "Fn 🌐"
+        }
+    }
+
+    static let fnHint = "If you choose Fn, set System Settings › Keyboard › \"Press 🌐 key to\" to \"Do Nothing\"."
 }
 
 /// Hold the trigger key to talk; double-tap it for hands-free mode (tap again to finish).
@@ -47,6 +67,7 @@ final class HotkeyManager {
     var onEvent: ((Event) -> Void)?
 
     private var monitors: [Any] = []
+    private var armedTrigger: TriggerKey?
     private var isDown = false
     private var downAt = Date.distantPast
     private var lastTapAt = Date.distantPast
@@ -78,8 +99,17 @@ final class HotkeyManager {
     }
 
     private func flagsChanged(_ e: NSEvent) {
+        let trigger = self.trigger
+        if trigger != armedTrigger {
+            // The key was changed (menu or Settings): drop any half-finished press of the old one.
+            armedTrigger = trigger
+            isDown = false
+            lastTapAt = .distantPast
+            if active { onEvent?(.cancel) }
+            reset()
+        }
         guard e.keyCode == trigger.keyCode else { return }
-        let pressed = e.modifierFlags.contains(trigger.flag)
+        let pressed = trigger.isPressed(in: e.modifierFlags)
         if pressed && !isDown {
             isDown = true
             downAt = Date()

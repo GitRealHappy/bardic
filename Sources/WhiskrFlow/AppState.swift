@@ -26,7 +26,7 @@ enum Phase: Equatable {
 @MainActor
 final class AppState: ObservableObject {
     static let shared = AppState()
-    static let log = Logger(subsystem: "com.jesseboyes.whiskrflow", category: "app")
+    static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "whiskrflow", category: "app")
 
     // Persisted preferences
     @AppStorage("triggerKey") var triggerKeyRaw = TriggerKey.rightOption.rawValue
@@ -37,6 +37,7 @@ final class AppState: ObservableObject {
     @AppStorage("vocabulary") var vocabularyText = ""
     @AppStorage("language") var language = "en"
     @AppStorage("addTrailingSpace") var addTrailingSpace = true
+    @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
 
     @Published var phase: Phase = .loading("Starting…") {
         didSet { if phase != oldValue { AppState.log.notice("phase: \(String(describing: self.phase), privacy: .public)") } }
@@ -51,6 +52,7 @@ final class AppState: ObservableObject {
     let cleaner = Cleaner()
     let hotkeys = HotkeyManager()
     lazy var hud = HUDController(state: self)
+    lazy var onboarding = OnboardingController(state: self)
 
     private var targetApp: NSRunningApplication?
     private var recordStart = Date()
@@ -79,19 +81,41 @@ final class AppState: ObservableObject {
     // MARK: - Startup
 
     func start() {
+        chooseDefaultModelsForThisMac()
         loadHistory()
         recorder.onLevel = { [weak self] lvl in
             Task { @MainActor in self?.level = lvl }
         }
         hotkeys.onEvent = { [weak self] e in self?.handle(e) }
         hotkeys.start()
+        watchPermissions()
 
-        Task {
-            if !Permissions.microphoneGranted { micGranted = await Permissions.requestMicrophone() }
-            if !Permissions.accessibilityGranted { Permissions.promptAccessibility() }
-            watchPermissions()
+        // People who already granted both permissions (e.g. upgrading from an earlier build) have
+        // effectively been through setup.
+        if !hasCompletedOnboarding && micGranted && accessibilityGranted {
+            hasCompletedOnboarding = true
+        }
+        if hasCompletedOnboarding {
+            Task {
+                if Permissions.microphoneUndetermined { micGranted = await Permissions.requestMicrophone() }
+                if !Permissions.accessibilityGranted { Permissions.promptAccessibility() }
+            }
+        } else {
+            // The setup window asks for permissions one at a time, with an explanation.
+            onboarding.show()
         }
         Task { await loadModels() }
+    }
+
+    /// The 3B cleanup model needs ~1.8 GB of RAM on top of Whisper; on 8 GB Macs that competes with
+    /// everything else, so start them on the 1.5B model. Only applies until the user picks one.
+    private func chooseDefaultModelsForThisMac() {
+        guard UserDefaults.standard.object(forKey: "cleanupModel") == nil else { return }
+        let gb = Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
+        if gb <= 8.5 {
+            cleanupModelRaw = CleanupModel.qwen25_1_5B.rawValue
+            AppState.log.notice("\(Int(gb.rounded())) GB RAM: defaulting to the 1.5B cleanup model")
+        }
     }
 
     func loadModels() async {

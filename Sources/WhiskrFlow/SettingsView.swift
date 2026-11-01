@@ -29,7 +29,7 @@ private struct GeneralTab: View {
             Picker("Push-to-talk key", selection: $triggerKeyRaw) {
                 ForEach(TriggerKey.allCases) { Text($0.displayName).tag($0.rawValue) }
             }
-            Text("Hold to dictate, release to insert. Double-tap for hands-free; tap again to finish. Esc cancels. If you choose Fn, set System Settings › Keyboard › \"Press 🌐 key to\" to \"Do Nothing\".")
+            Text("Hold to dictate, release to insert. Double-tap for hands-free; tap again to finish. Esc cancels. \(TriggerKey.fnHint) You can also change the key from the menu bar.")
                 .font(.caption).foregroundStyle(.secondary)
 
             Toggle("AI cleanup (remove fillers, fix punctuation, apply corrections)", isOn: $aiCleanup)

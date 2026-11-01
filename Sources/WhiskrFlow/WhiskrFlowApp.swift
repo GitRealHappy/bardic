@@ -64,8 +64,23 @@ struct MenuContent: View {
             }
             .disabled(!canToggle)
 
-            Text("Hold \((TriggerKey(rawValue: triggerKeyRaw) ?? .rightOption).displayName) to talk · double-tap for hands-free · Esc cancels")
+            HStack {
+                Label("Push-to-talk key", systemImage: "keyboard")
+                Spacer()
+                Picker("Push-to-talk key", selection: $triggerKeyRaw) {
+                    ForEach(TriggerKey.allCases) { Text($0.displayName).tag($0.rawValue) }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+            }
+
+            Text("Hold \(triggerKey.shortName) to talk · double-tap for hands-free · Esc cancels")
                 .font(.caption).foregroundStyle(.secondary)
+            if triggerKey == .fn {
+                Text(TriggerKey.fnHint).font(.caption2).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Divider()
 
@@ -90,6 +105,9 @@ struct MenuContent: View {
             HStack {
                 Toggle("AI cleanup", isOn: $aiCleanup).toggleStyle(.switch).controlSize(.mini)
                 Spacer()
+                Button { state.onboarding.show() } label: { Image(systemName: "questionmark.circle") }
+                    .buttonStyle(.borderless)
+                    .help("Setup guide")
                 Button("Settings…") {
                     openWindow(id: "settings")
                     NSApp.activate(ignoringOtherApps: true)
@@ -101,6 +119,7 @@ struct MenuContent: View {
         .frame(width: 340)
     }
 
+    private var triggerKey: TriggerKey { TriggerKey(rawValue: triggerKeyRaw) ?? .rightOption }
     private var isRecording: Bool { if case .recording = state.phase { return true }; return false }
     private var canToggle: Bool {
         switch state.phase { case .idle, .recording, .error: return true; default: return false }
