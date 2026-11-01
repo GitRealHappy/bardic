@@ -54,6 +54,17 @@ public enum CleanupModel: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// True for errors caused by the network (offline, timeouts, DNS…), including ones wrapped by a library.
+/// Those say nothing about whether the files on disk are damaged.
+public func isNetworkError(_ error: Error) -> Bool {
+    var current: NSError? = error as NSError
+    while let e = current {
+        if e.domain == NSURLErrorDomain { return true }
+        current = e.userInfo[NSUnderlyingErrorKey] as? NSError
+    }
+    return false
+}
+
 public enum Paths {
     /// ~/Library/Application Support/Bardic
     public static let appSupport: URL = {

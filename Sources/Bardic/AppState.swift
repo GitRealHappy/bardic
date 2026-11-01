@@ -222,13 +222,8 @@ final class AppState: ObservableObject {
     }
 
     private static func friendlyLoadError(_ error: Error, what: String) -> String {
-        if let url = error as? URLError {
-            switch url.code {
-            case .notConnectedToInternet, .networkConnectionLost, .timedOut, .cannotFindHost,
-                 .cannotConnectToHost, .dnsLookupFailed, .dataNotAllowed, .internationalRoamingOff:
-                return "Couldn't download the models. Check your internet connection, then press Retry."
-            default: break
-            }
+        if isNetworkError(error) {
+            return "Couldn't download the models. Check your internet connection, then press Retry."
         }
         return "The \(what) didn't load: \(error.localizedDescription)"
     }

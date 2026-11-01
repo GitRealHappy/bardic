@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Pressing Retry while still offline no longer deletes a speech or cleanup model that had finished
+  downloading.
+
 ## 0.2.0
 
 The first public release.

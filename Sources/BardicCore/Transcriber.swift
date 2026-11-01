@@ -38,8 +38,9 @@ public actor Transcriber {
 
         do {
             whisper = try await Self.loadFromDisk(folder, progress: progress)
-        } catch where !freshDownload {
+        } catch where !freshDownload && !isNetworkError(error) {
             // A model that's on disk but won't load is most likely damaged: fetch it again, once.
+            // Network errors (e.g. the tokenizer fetch while offline) leave the files alone.
             try? FileManager.default.removeItem(at: folder)
             folder = try await download(model, progress: progress)
             whisper = try await Self.loadFromDisk(folder, progress: progress)

@@ -51,7 +51,7 @@ public actor Cleaner {
         } catch {
             // A complete-looking model that won't load is damaged; remove it so Retry fetches a fresh
             // copy. A partial download is kept, because the next attempt resumes it.
-            if wasDownloaded, !(error is URLError) {
+            if wasDownloaded, !isNetworkError(error) {
                 try? FileManager.default.removeItem(at: Paths.cleanupModel(model))
             }
             throw error
